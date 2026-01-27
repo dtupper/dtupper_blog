@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}{{ metadata.title }}{% endblock %}
+
+{% block description %}{{ metadata.description or site.description }}{% endblock %}
+
+{% block content %}
+<article class="project">
+    <header class="project-header">
+        <h1>{{ metadata.title }}</h1>
+        {% if metadata.status %}
+        <span class="project-status status-{{ metadata.status|lower }}">
+            {{ metadata.status }}
+        </span>
+        {% endif %}
+        {% if metadata.description %}
+        <p class="lead">{{ metadata.description }}</p>
+        {% endif %}
+    </header>
+
+    {% if metadata.links %}
+    <div class="project-links">
+        {% for link in metadata.links %}
+        <a href="{{ link.url }}" class="project-link" target="_blank" rel="noopener">
+            {{ link.label }}
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="project-content prose">
+        {{ body|safe }}
+    </div>
+
+    <footer class="project-footer">
+        <p><a href="/projects/">&larr; Back to projects</a></p>
+    </footer>
+</article>
+{% endblock %}

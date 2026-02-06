@@ -16,10 +16,10 @@ PAGES_DIR = CONTENT_DIR / "pages"
 
 # Site metadata
 SITE_CONFIG = {
-    "title": "My Site",
-    "description": "A personal website and blog",
-    "author": "David Tupper",
-    "url": "https://example.com",
+    "title": "dtupper.com",
+    "description": "personal website, blog, projects",
+    "author": "Tupper",
+    "url": "https://dtupper.com",
     "language": "en",
     "locale": "en-US",
 }

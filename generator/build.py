@@ -1,24 +1,17 @@
 """Main build orchestration for the static site generator."""
 
+import argparse
+import dataclasses
 import shutil
 from datetime import date, datetime
 from pathlib import Path
 
 from babel.dates import format_date
 from feedgen.feed import FeedGenerator
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import ChoiceLoader, Environment, FileSystemLoader
 from slugify import slugify
 
-from .config import (
-    BASE_DIR,
-    CONTENT_DIR,
-    OUTPUT_DIR,
-    SECTIONS,
-    SITE_CONFIG,
-    STATIC_DIR,
-    TEMPLATES_DIR,
-    GENERATE_RSS,
-)
+from .config import SiteConfig, load_config
 from .markdown_ext import process_markdown
 
 
@@ -33,7 +26,7 @@ class ContentItem:
         self.slug: str = ""
         self.url: str = ""
 
-    def load(self) -> None:
+    def load(self, section_config: dict) -> None:
         """Load and process the markdown file."""
         content = self.path.read_text(encoding="utf-8")
         self.metadata, self.html = process_markdown(content)
@@ -53,14 +46,13 @@ class ContentItem:
             self.metadata["tags"] = []
 
         # Generate URL
-        section_config = SECTIONS.get(self.section, {})
         url_pattern = section_config.get("url_pattern", "{slug}")
 
         if section_config.get("date_in_url") and self.metadata.get("date"):
-            date = self.metadata["date"]
-            if isinstance(date, str):
-                date = datetime.fromisoformat(date)
-            self.url = f"blog/{date.year}/{date.month:02d}/{self.slug}"
+            d = self.metadata["date"]
+            if isinstance(d, str):
+                d = datetime.fromisoformat(d)
+            self.url = f"blog/{d.year}/{d.month:02d}/{self.slug}"
         else:
             self.url = url_pattern.format(slug=self.slug)
 
@@ -92,45 +84,60 @@ class ContentItem:
 class SiteBuilder:
     """Main site builder class."""
 
-    def __init__(self):
-        self.env = Environment(
-            loader=FileSystemLoader(TEMPLATES_DIR),
-            autoescape=True,
-        )
+    def __init__(self, config: SiteConfig):
+        self.config = config
+        self.env = self._create_jinja_env()
         self._setup_template_globals()
         self.content: dict[str, list[ContentItem]] = {
-            "blog": [],
-            "projects": [],
-            "pages": [],
+            name: [] for name in config.sections
         }
+
+    def _create_jinja_env(self) -> Environment:
+        """Create Jinja2 environment with template override chain."""
+        loaders = []
+        # User templates take priority (if directory exists)
+        if self.config.templates_dir.exists():
+            loaders.append(FileSystemLoader(self.config.templates_dir))
+        # Bundled default templates as fallback
+        loaders.append(FileSystemLoader(self.config.default_templates_dir))
+
+        return Environment(
+            loader=ChoiceLoader(loaders),
+            autoescape=True,
+        )
 
     def _setup_template_globals(self) -> None:
         """Set up global variables and filters for templates."""
-        self.env.globals["site"] = SITE_CONFIG
+        self.env.globals["site"] = self.config.site
         self.env.globals["now"] = datetime.now()
 
         # Add date formatting filter
-        def format_date_filter(date, format_type="long", locale="en_US"):
-            if isinstance(date, str):
-                date = datetime.fromisoformat(date)
-            return format_date(date, format=format_type, locale=locale)
+        def format_date_filter(d, format_type="long", locale="en_US"):
+            if isinstance(d, str):
+                d = datetime.fromisoformat(d)
+            return format_date(d, format=format_type, locale=locale)
 
         self.env.filters["format_date"] = format_date_filter
 
     def clean_output(self) -> None:
         """Remove existing output directory."""
-        if OUTPUT_DIR.exists():
-            shutil.rmtree(OUTPUT_DIR)
-        OUTPUT_DIR.mkdir(parents=True)
+        if self.config.output_dir.exists():
+            shutil.rmtree(self.config.output_dir)
+        self.config.output_dir.mkdir(parents=True)
 
     def copy_static_assets(self) -> None:
-        """Copy static assets to output directory."""
-        if STATIC_DIR.exists():
-            shutil.copytree(STATIC_DIR, OUTPUT_DIR / "static")
+        """Copy static assets to output directory with layered override."""
+        dest = self.config.output_dir / "static"
+        # Copy bundled defaults first
+        if self.config.default_static_dir.exists():
+            shutil.copytree(self.config.default_static_dir, dest)
+        # Overlay user static on top (overwriting conflicts)
+        if self.config.static_dir.exists():
+            shutil.copytree(self.config.static_dir, dest, dirs_exist_ok=True)
 
     def load_content(self) -> None:
         """Load all content from content directories."""
-        for section_name, section_config in SECTIONS.items():
+        for section_name, section_config in self.config.sections.items():
             content_dir = section_config["content_dir"]
             if not content_dir.exists():
                 content_dir.mkdir(parents=True)
@@ -138,23 +145,24 @@ class SiteBuilder:
 
             for md_file in content_dir.glob("*.md"):
                 item = ContentItem(md_file, section_name)
-                item.load()
+                item.load(section_config)
                 if item.is_published:
                     self.content[section_name].append(item)
 
         # Sort blog posts by date (newest first)
-        self.content["blog"].sort(key=lambda x: x.date, reverse=True)
+        if "blog" in self.content:
+            self.content["blog"].sort(key=lambda x: x.date, reverse=True)
 
     def render_content(self) -> None:
         """Render all content items to HTML files."""
         for section_name, items in self.content.items():
-            section_config = SECTIONS.get(section_name, {})
+            section_config = self.config.sections.get(section_name, {})
             template_name = section_config.get("template", "page.html")
             template = self.env.get_template(template_name)
 
             for item in items:
                 # Create output directory structure
-                output_path = OUTPUT_DIR / item.url / "index.html"
+                output_path = self.config.output_dir / item.url / "index.html"
                 output_path.parent.mkdir(parents=True, exist_ok=True)
 
                 # Render template
@@ -171,63 +179,66 @@ class SiteBuilder:
         template = self.env.get_template("index.html")
 
         html = template.render(
-            posts=self.content["blog"][:5],
-            projects=self.content["projects"][:3],
-            title=SITE_CONFIG["title"],
+            posts=self.content.get("blog", [])[:5],
+            projects=self.content.get("projects", [])[:3],
+            title=self.config.site["title"],
         )
 
-        output_path = OUTPUT_DIR / "index.html"
+        output_path = self.config.output_dir / "index.html"
         output_path.write_text(html, encoding="utf-8")
 
     def render_section_indexes(self) -> None:
         """Render index pages for blog and projects sections."""
+        site_title = self.config.site["title"]
+
         # Blog index
-        if self.content["blog"]:
+        if self.content.get("blog"):
             template = self.env.get_template("index.html")
             html = template.render(
                 posts=self.content["blog"],
                 projects=[],
-                title=f"Blog - {SITE_CONFIG['title']}",
+                title=f"Blog - {site_title}",
                 section="blog",
             )
-            output_path = OUTPUT_DIR / "blog" / "index.html"
+            output_path = self.config.output_dir / "blog" / "index.html"
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(html, encoding="utf-8")
 
         # Projects index
-        if self.content["projects"]:
+        if self.content.get("projects"):
             template = self.env.get_template("index.html")
             html = template.render(
                 posts=[],
                 projects=self.content["projects"],
-                title=f"Projects - {SITE_CONFIG['title']}",
+                title=f"Projects - {site_title}",
                 section="projects",
             )
-            output_path = OUTPUT_DIR / "projects" / "index.html"
+            output_path = self.config.output_dir / "projects" / "index.html"
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(html, encoding="utf-8")
 
     def generate_rss(self) -> None:
         """Generate RSS feed for blog posts."""
-        if not GENERATE_RSS or not self.content["blog"]:
+        if not self.config.generate_rss or not self.content.get("blog"):
             return
 
+        site = self.config.site
         fg = FeedGenerator()
-        fg.id(SITE_CONFIG["url"])
-        fg.title(SITE_CONFIG["title"])
-        fg.description(SITE_CONFIG["description"])
-        fg.link(href=SITE_CONFIG["url"], rel="alternate")
-        fg.language(SITE_CONFIG["language"])
+        fg.id(site["url"])
+        fg.title(site["title"])
+        fg.description(site["description"])
+        fg.link(href=site["url"], rel="alternate")
+        fg.language(site["language"])
 
         for post in self.content["blog"][:20]:
             fe = fg.add_entry()
-            fe.id(f"{SITE_CONFIG['url']}/{post.url}")
+            fe.id(f"{site['url']}/{post.url}")
             fe.title(post.metadata["title"])
-            fe.link(href=f"{SITE_CONFIG['url']}/{post.url}")
+            fe.link(href=f"{site['url']}/{post.url}")
             fe.description(post.metadata.get("description", ""))
             fe.published(post.date.strftime("%Y-%m-%dT%H:%M:%S+00:00"))
 
-        rss_path = OUTPUT_DIR / "feed.xml"
+        rss_path = self.config.output_dir / "feed.xml"
         fg.rss_file(str(rss_path))
 
     def build(self) -> None:
@@ -256,16 +267,48 @@ class SiteBuilder:
         # Print summary
         total = sum(len(items) for items in self.content.values())
         print(f"\nBuild complete!")
-        print(f"  Blog posts: {len(self.content['blog'])}")
-        print(f"  Projects: {len(self.content['projects'])}")
-        print(f"  Pages: {len(self.content['pages'])}")
+        print(f"  Blog posts: {len(self.content.get('blog', []))}")
+        print(f"  Projects: {len(self.content.get('projects', []))}")
+        print(f"  Pages: {len(self.content.get('pages', []))}")
         print(f"  Total: {total} items")
-        print(f"\nOutput: {OUTPUT_DIR}")
+        print(f"\nOutput: {self.config.output_dir}")
 
 
 def main() -> None:
     """Main entry point for the build script."""
-    builder = SiteBuilder()
+    parser = argparse.ArgumentParser(
+        prog="build-site",
+        description="Build a static site from Markdown content",
+    )
+    parser.add_argument(
+        "project_dir",
+        nargs="?",
+        default=".",
+        help="Path to the project directory containing site.yaml (default: current directory)",
+    )
+    parser.add_argument(
+        "-c", "--config",
+        default=None,
+        help="Path to site.yaml config file (default: PROJECT_DIR/site.yaml)",
+    )
+    parser.add_argument(
+        "-o", "--output",
+        default=None,
+        help="Override the output directory",
+    )
+
+    args = parser.parse_args()
+
+    project_dir = Path(args.project_dir).resolve()
+    config_path = Path(args.config).resolve() if args.config else None
+
+    config = load_config(project_dir, config_path)
+
+    # CLI override for output dir
+    if args.output:
+        config = dataclasses.replace(config, output_dir=Path(args.output).resolve())
+
+    builder = SiteBuilder(config)
     builder.build()
 
 

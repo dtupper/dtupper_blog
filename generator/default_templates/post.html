@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}{{ metadata.title }}{% endblock %}
+
+{% block description %}{{ metadata.description or site.description }}{% endblock %}
+
+{% block content %}
+<article class="post">
+    <header class="post-header">
+        <h1>{{ metadata.title }}</h1>
+        <div class="post-meta">
+            <time datetime="{{ content.date.isoformat() }}">{{ content.date|format_date }}</time>
+            <span class="reading-time">{{ content.reading_time }} min read</span>
+        </div>
+        {% if metadata.tags %}
+        <div class="tags">
+            {% for tag in metadata.tags %}
+            <span class="tag">{{ tag }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </header>
+
+    <div class="post-content prose">
+        {{ body|safe }}
+    </div>
+
+    <footer class="post-footer">
+        <p><a href="/blog/">&larr; Back to blog</a></p>
+    </footer>
+</article>
+{% endblock %}

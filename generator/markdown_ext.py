@@ -3,8 +3,10 @@
 import re
 import yaml
 import markdown
+from xml.etree.ElementTree import Element
 from markdown.preprocessors import Preprocessor
 from markdown.postprocessors import Postprocessor
+from markdown.inlinepatterns import InlineProcessor
 from markdown.extensions import Extension
 from pygments import highlight
 from pygments.lexers import get_lexer_by_name, guess_lexer
@@ -235,13 +237,32 @@ class CodeBlockPostprocessor(Postprocessor):
         return self.CODE_BLOCK_PATTERN.sub(highlight_code, text)
 
 
+class BareAutoLinkInlineProcessor(InlineProcessor):
+    """Auto-link bare URLs that aren't already in a link, code span, or angle brackets."""
+
+    def handleMatch(self, m, data):
+        url = m.group(1)
+        el = Element('a')
+        el.set('href', url)
+        el.text = url
+        return el, m.start(0), m.end(0)
+
+
 class CustomEmbedsExtension(Extension):
     """Markdown extension for custom embeds and enhanced features."""
 
     def extendMarkdown(self, md: markdown.Markdown) -> None:
-        """Register preprocessors and postprocessors."""
+        """Register preprocessors, inline patterns, and postprocessors."""
         md.preprocessors.register(
             EmbedPreprocessor(md), "embed_preprocessor", 30
+        )
+        # Auto-link bare URLs (priority 110, below built-in autolink at 120)
+        md.inlinePatterns.register(
+            BareAutoLinkInlineProcessor(
+                r'(?<![<(\["\'])(https?://[^\s<>)\]]*[^\s<>)\].,!?;:])',
+                md
+            ),
+            "bare_auto_link", 110
         )
         md.postprocessors.register(
             CodeBlockPostprocessor(md), "code_highlight", 20

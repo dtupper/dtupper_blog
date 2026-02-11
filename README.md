@@ -1,4 +1,4 @@
-# dtupper-site-generator
+# dtupper_blog
 
 A Python-based static site generator that converts Markdown to HTML with support for rich media embeds, multi-section site structure, and automated deployment. Designed to be installed as a standalone package and used by a separate content repository.
 
@@ -19,14 +19,14 @@ A Python-based static site generator that converts Markdown to HTML with support
 Install directly from the git repository:
 
 ```bash
-pip install git+https://github.com/yourusername/dtupper-site-generator.git
+pip install git+https://github.com/dtupper/dtupper_blog.git
 ```
 
 Or for local development:
 
 ```bash
-git clone https://github.com/yourusername/dtupper-site-generator.git
-cd dtupper-site-generator
+git clone https://github.com/dtupper/dtupper_blog.git
+cd dtupper_blog
 pip install -e .
 ```
 
@@ -253,7 +253,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install git+https://github.com/yourusername/dtupper-site-generator.git
+      - run: pip install git+https://github.com/dtupper/dtupper_blog.git
       - run: build-site
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -277,7 +277,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install git+https://github.com/yourusername/dtupper-site-generator.git
+      - run: pip install git+https://github.com/dtupper/dtupper_blog.git
       - run: build-site
       - uses: cloudflare/wrangler-action@v3
         with:
@@ -289,7 +289,7 @@ jobs:
 ## Generator Project Structure
 
 ```
-dtupper-site-generator/
+dtupper_blog/
 ├── generator/                  # Python package
 │   ├── __init__.py
 │   ├── config.py               # SiteConfig dataclass + YAML loader

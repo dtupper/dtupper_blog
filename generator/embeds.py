@@ -150,3 +150,47 @@ EMBED_PROCESSORS: dict[str, Any] = {
 
 # Special processor for images (different signature)
 IMAGE_PROCESSOR = process_image
+
+
+# URL patterns for auto-embed detection
+# Each tuple: (compiled_regex, embed_type, content_extractor)
+_EMBED_URL_PATTERNS: list[tuple[re.Pattern, str, Any]] = [
+    # YouTube
+    (re.compile(r'https?://(?:www\.)?youtube\.com/watch\?.*?v=([a-zA-Z0-9_-]+)'),
+     'youtube', lambda m: m.group(1)),
+    (re.compile(r'https?://(?:www\.)?youtube\.com/shorts/([a-zA-Z0-9_-]+)'),
+     'youtube', lambda m: m.group(1)),
+    (re.compile(r'https?://youtu\.be/([a-zA-Z0-9_-]+)'),
+     'youtube', lambda m: m.group(1)),
+    # Vimeo
+    (re.compile(r'https?://(?:www\.)?vimeo\.com/(\d+)'),
+     'vimeo', lambda m: m.group(1)),
+    # Twitter / X
+    (re.compile(r'https?://(?:www\.)?(?:twitter\.com|x\.com)/\w+/status/\d+'),
+     'twitter', lambda m: m.group(0)),
+    # Bluesky
+    (re.compile(r'https?://bsky\.app/profile/[^/]+/post/[a-zA-Z0-9]+'),
+     'bluesky', lambda m: m.group(0)),
+    # GitHub Gist
+    (re.compile(r'https?://gist\.github\.com/([^/]+/[a-f0-9]+)'),
+     'gist', lambda m: m.group(1)),
+    # CodePen
+    (re.compile(r'https?://codepen\.io/([^/]+)/pen/([a-zA-Z0-9]+)'),
+     'codepen', lambda m: f"{m.group(1)}/{m.group(2)}"),
+    # Spotify
+    (re.compile(r'https?://open\.spotify\.com/(track|album|playlist|episode|show)/([a-zA-Z0-9]+)'),
+     'spotify', lambda m: f"{m.group(1)}/{m.group(2)}"),
+]
+
+
+def match_embed_url(url: str) -> tuple[str, str] | None:
+    """Match a URL against known embed service patterns.
+
+    Returns (embed_type, content) if matched, None otherwise.
+    The content value is exactly what the corresponding processor expects.
+    """
+    for pattern, embed_type, extractor in _EMBED_URL_PATTERNS:
+        match = pattern.match(url)
+        if match:
+            return (embed_type, extractor(match))
+    return None

@@ -10,7 +10,7 @@ from pygments import highlight
 from pygments.lexers import get_lexer_by_name, guess_lexer
 from pygments.formatters import HtmlFormatter
 
-from .embeds import EMBED_PROCESSORS, IMAGE_PROCESSOR
+from .embeds import EMBED_PROCESSORS, IMAGE_PROCESSOR, match_embed_url
 
 
 class FrontmatterExtractor:
@@ -34,7 +34,7 @@ class FrontmatterExtractor:
 
 
 class EmbedPreprocessor(Preprocessor):
-    """Process custom embed directives before markdown parsing."""
+    """Process custom embed directives and auto-embed URLs before markdown parsing."""
 
     # Pattern: ::name[content](optional_path){optional_attrs}
     EMBED_PATTERN = re.compile(
@@ -43,31 +43,122 @@ class EmbedPreprocessor(Preprocessor):
     # Pattern for fenced code block delimiters
     CODE_FENCE_PATTERN = re.compile(r"^(`{3,}|~{3,})")
 
+    # Auto-embed URL detection patterns
+    _BARE_URL_RE = re.compile(r'^https?://\S+$')
+    _INLINE_URL_RE = re.compile(r'https?://[^\s<>)\]]+')
+    _INLINE_CODE_RE = re.compile(r'`[^`]+`')
+    _REF_LINK_RE = re.compile(r'^\s*\[.*\]:\s+')
+    _TRAILING_PUNCT = '.!?,;'
+
     def run(self, lines: list[str]) -> list[str]:
-        """Process embed directives in the content."""
+        """Process embed directives and auto-embed URLs in the content."""
         new_lines = []
         in_code_block = False
         code_fence = None
+        pending_embeds: list[str] = []
 
         for line in lines:
+            stripped = line.strip()
+
             # Check for code fence start/end
-            fence_match = self.CODE_FENCE_PATTERN.match(line.strip())
+            fence_match = self.CODE_FENCE_PATTERN.match(stripped)
             if fence_match:
                 fence = fence_match.group(1)
                 if not in_code_block:
                     in_code_block = True
-                    code_fence = fence[0]  # Store the fence character (` or ~)
-                elif line.strip().startswith(code_fence):
+                    code_fence = fence[0]
+                elif stripped.startswith(code_fence):
                     in_code_block = False
                     code_fence = None
 
-            # Only process embeds outside code blocks
+            # Inside code blocks: pass through unchanged
             if in_code_block:
                 new_lines.append(line)
-            else:
-                new_lines.append(self._process_line(line))
+                continue
+
+            # Blank line: flush pending inline embeds, then add the blank line
+            if not stripped:
+                if pending_embeds:
+                    for embed in pending_embeds:
+                        new_lines.append(embed)
+                        new_lines.append('')
+                    pending_embeds = []
+                new_lines.append(line)
+                continue
+
+            # Check for standalone embeddable URL (entire line is just a URL)
+            standalone = self._match_standalone_url(stripped)
+            if standalone:
+                embed_type, content = standalone
+                processor = EMBED_PROCESSORS.get(embed_type)
+                if processor:
+                    new_lines.append(processor(content, {}))
+                    continue
+
+            # Scan original line for inline embeddable URLs (before ::embed processing)
+            inline_embeds = self._find_inline_embed_urls(line)
+            pending_embeds.extend(inline_embeds)
+
+            # Process explicit ::embed syntax (existing behavior)
+            new_lines.append(self._process_line(line))
+
+        # End of content: flush any remaining pending embeds
+        if pending_embeds:
+            new_lines.append('')
+            for embed in pending_embeds:
+                new_lines.append(embed)
+                new_lines.append('')
 
         return new_lines
+
+    def _match_standalone_url(self, stripped: str) -> tuple[str, str] | None:
+        """Check if a stripped line is a standalone embeddable URL.
+
+        Returns (embed_type, content) or None.
+        """
+        # Reject angle-bracket URLs (embed suppression)
+        if stripped.startswith('<'):
+            return None
+        # Must be a bare URL with no other text
+        if not self._BARE_URL_RE.match(stripped):
+            return None
+        return match_embed_url(stripped)
+
+    def _find_inline_embed_urls(self, line: str) -> list[str]:
+        """Find inline embeddable URLs and return their embed HTML.
+
+        Skips URLs that are suppressed with <>, inside markdown links,
+        inside inline code, or inside ::embed syntax.
+        """
+        # Skip reference link definitions
+        if self._REF_LINK_RE.match(line):
+            return []
+
+        # Replace inline code spans with spaces so URLs inside them aren't matched
+        scan_line = self._INLINE_CODE_RE.sub(lambda m: ' ' * len(m.group(0)), line)
+
+        results = []
+        for m in self._INLINE_URL_RE.finditer(scan_line):
+            url = m.group(0)
+            start = m.start()
+
+            # Skip URLs preceded by < ( or [ (suppressed / markdown link / embed syntax)
+            if start > 0 and scan_line[start - 1] in '<([':
+                continue
+
+            # Strip trailing punctuation
+            while url and url[-1] in self._TRAILING_PUNCT:
+                url = url[:-1]
+
+            # Try to match against embed patterns
+            result = match_embed_url(url)
+            if result:
+                embed_type, content = result
+                processor = EMBED_PROCESSORS.get(embed_type)
+                if processor:
+                    results.append(processor(content, {}))
+
+        return results
 
     def _process_line(self, line: str) -> str:
         """Process a single line for embed directives."""

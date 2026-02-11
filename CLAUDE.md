@@ -106,15 +106,34 @@ site:
 
 ## Custom Markdown Syntax
 
+### Auto-embed URLs (Discord-style)
+
+URLs from supported services are automatically embedded. A URL on its own line replaces it with the embed. An inline URL leaves the text as-is and appends the embed after the paragraph.
+
+To suppress auto-embedding, wrap the URL in angle brackets: `<https://youtube.com/watch?v=xxx>` — this renders as a plain link instead.
+
+Supported URL patterns:
+- `https://youtube.com/watch?v=ID`, `https://youtu.be/ID`, `https://youtube.com/shorts/ID`
+- `https://vimeo.com/ID`
+- `https://twitter.com/user/status/ID`, `https://x.com/user/status/ID`
+- `https://bsky.app/profile/user/post/ID`
+- `https://gist.github.com/user/id`
+- `https://codepen.io/user/pen/id`
+- `https://open.spotify.com/track/ID` (also album, playlist, episode, show)
+
+### Explicit embed syntax
+
+For custom attributes (width, height, caption, etc.), use the explicit `::embed` syntax:
+
 ```markdown
 ::image[alt text](path){caption="..." width="..."}
-::youtube[VIDEO_ID]
-::twitter[TWEET_URL]
+::youtube[VIDEO_ID]{width="800" height="450"}
+::twitter[TWEET_URL]{theme="dark"}
 ::bluesky[POST_URL]
 ::vimeo[VIDEO_ID]
-::gist[USER/GIST_ID]
-::codepen[USER/PEN_ID]
-::spotify[URI]
+::gist[USER/GIST_ID]{file="filename.js"}
+::codepen[USER/PEN_ID]{height="500" theme="dark" tab="css"}
+::spotify[URI]{height="250"}
 ::timestamp[2024-01-15T10:30:00]{locale="en-US" format="long"}
 ```
 

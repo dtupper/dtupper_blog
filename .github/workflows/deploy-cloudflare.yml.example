@@ -24,14 +24,14 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install -e .
+        run: pip install -r requirements.txt
 
       - name: Build site
-        run: python -m generator.build
+        run: build-site
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy output --project-name=dtupper-blog
+          command: pages deploy output --project-name=YOUR_PROJECT_NAME

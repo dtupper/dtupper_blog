@@ -10,6 +10,9 @@
         <h1>{{ metadata.title }}</h1>
         <div class="post-meta">
             <time datetime="{{ content.date.isoformat() }}">{{ content.date|format_date }}</time>
+            {% if metadata.last_updated %}
+            <span class="last-updated">Updated {{ metadata.last_updated|format_date }}</span>
+            {% endif %}
             <span class="reading-time">{{ content.reading_time }} min read</span>
         </div>
         {% if metadata.tags %}

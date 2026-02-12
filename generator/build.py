@@ -3,6 +3,7 @@
 import argparse
 import dataclasses
 import shutil
+import subprocess
 from datetime import date, datetime
 from pathlib import Path
 
@@ -44,6 +45,16 @@ class ContentItem:
             self.metadata["status"] = "published"
         if "tags" not in self.metadata:
             self.metadata["tags"] = []
+
+        # Normalize last_updated to datetime
+        if "last_updated" in self.metadata:
+            lu = self.metadata["last_updated"]
+            if isinstance(lu, str):
+                self.metadata["last_updated"] = datetime.fromisoformat(lu)
+            elif isinstance(lu, date) and not isinstance(lu, datetime):
+                self.metadata["last_updated"] = datetime.combine(
+                    lu, datetime.min.time()
+                )
 
         # Generate URL
         url_pattern = section_config.get("url_pattern", "{slug}")
@@ -106,10 +117,27 @@ class SiteBuilder:
             autoescape=True,
         )
 
+    def _get_git_hash(self) -> str | None:
+        """Get the short hash of the latest git commit, or None."""
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                capture_output=True,
+                text=True,
+                cwd=self.config.project_dir,
+            )
+            if result.returncode == 0:
+                return result.stdout.strip()
+        except FileNotFoundError:
+            pass
+        return None
+
     def _setup_template_globals(self) -> None:
         """Set up global variables and filters for templates."""
         self.env.globals["site"] = self.config.site
         self.env.globals["now"] = datetime.now()
+        self.env.globals["build_time"] = datetime.now()
+        self.env.globals["build_hash"] = self._get_git_hash()
 
         # Add date formatting filter
         def format_date_filter(d, format_type="long", locale="en_US"):

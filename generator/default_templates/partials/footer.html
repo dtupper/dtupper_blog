@@ -4,5 +4,8 @@
         <p>
             <a href="/feed.xml">RSS</a>
         </p>
+        <p class="build-info">
+            Built {{ build_time|format_date }}{% if build_hash %} · {{ build_hash }}{% endif %}
+        </p>
     </div>
 </footer>

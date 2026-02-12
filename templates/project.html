@@ -16,6 +16,9 @@
         {% if metadata.description %}
         <p class="lead">{{ metadata.description }}</p>
         {% endif %}
+        {% if metadata.last_updated %}
+        <p class="last-updated">Last updated {{ metadata.last_updated|format_date }}</p>
+        {% endif %}
     </header>
 
     {% if metadata.links %}

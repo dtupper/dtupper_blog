@@ -90,6 +90,9 @@ build-site -o /path/to/output
 
 # Also works as a Python module
 python -m generator.build
+
+# You can easily build and test
+python -m generator.build && python -m http.server -d output 8001
 ```
 
 ## Configuration Reference

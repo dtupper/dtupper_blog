@@ -29,10 +29,10 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install -e .
+        run: pip install -r requirements.txt
 
       - name: Build site
-        run: python -m generator.build
+        run: build-site
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

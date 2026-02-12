@@ -254,7 +254,7 @@ class SiteBuilder:
         fg = FeedGenerator()
         fg.id(site["url"])
         fg.title(site["title"])
-        fg.description(site["description"])
+        fg.description(site["description"] or site["title"])
         fg.link(href=site["url"], rel="alternate")
         fg.language(site["language"])
 

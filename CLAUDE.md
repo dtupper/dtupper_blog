@@ -40,7 +40,7 @@ generator/                      # Python package
 │   ├── base.html, index.html, post.html, project.html, page.html
 │   └── partials/header.html, partials/footer.html
 └── default_static/             # Bundled static assets (package data)
-    └── css/style.css
+    └── css/style.css, custom.css
 ```
 
 **Also in repo root (for testing, will move to content repo later):**
@@ -48,6 +48,15 @@ generator/                      # Python package
 - `content/` - Sample Markdown content (blog/, projects/, pages/)
 - `templates/` - User template overrides (takes priority over defaults)
 - `static/` - User static overrides (copied on top of defaults)
+
+## CSS Override Strategy
+
+The generator ships a full default stylesheet (`generator/default_static/css/style.css`) and an empty `custom.css`. Both are linked in `base.html`, with `custom.css` loaded second.
+
+Content repos can customize styling in three ways:
+- **Extend**: Provide `static/css/custom.css` to add rules on top of the defaults (cascade wins)
+- **Replace**: Provide `static/css/style.css` to fully replace the default stylesheet
+- **Both**: Provide both files for complete control
 
 ## Key Modules
 

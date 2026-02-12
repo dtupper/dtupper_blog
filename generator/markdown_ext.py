@@ -1,6 +1,7 @@
 """Custom Markdown extensions for rich media embeds and enhanced syntax."""
 
 import re
+import unicodedata
 import yaml
 import markdown
 from xml.etree.ElementTree import Element
@@ -237,6 +238,215 @@ class CodeBlockPostprocessor(Postprocessor):
         return self.CODE_BLOCK_PATTERN.sub(highlight_code, text)
 
 
+class AsidePreprocessor(Preprocessor):
+    """Convert <aside>...</aside> blocks to :::callout directives."""
+
+    def run(self, lines: list[str]) -> list[str]:
+        new_lines = []
+        in_aside = False
+
+        for line in lines:
+            stripped = line.strip()
+
+            if stripped == '<aside>' or stripped == '<aside >':
+                in_aside = True
+                new_lines.append(':::callout')
+                continue
+            elif stripped == '</aside>' and in_aside:
+                in_aside = False
+                new_lines.append(':::')
+                continue
+
+            new_lines.append(line)
+
+        return new_lines
+
+
+class DirectivePreprocessor(Preprocessor):
+    """Process :::callout and :::details[summary] directives."""
+
+    DIRECTIVE_PATTERN = re.compile(r'^:::(\w+)(?:\[([^\]]*)\])?\s*$')
+    CODE_FENCE_PATTERN = re.compile(r'^(`{3,}|~{3,})')
+
+    def run(self, lines: list[str]) -> list[str]:
+        new_lines = []
+        in_code_block = False
+        code_fence = None
+        in_directive = False
+        directive_type = None
+        directive_arg = None
+        directive_content: list[str] = []
+
+        for line in lines:
+            stripped = line.strip()
+
+            # Track code fences
+            fence_match = self.CODE_FENCE_PATTERN.match(stripped)
+            if fence_match:
+                fence = fence_match.group(1)
+                if not in_code_block:
+                    in_code_block = True
+                    code_fence = fence[0]
+                elif stripped.startswith(code_fence):
+                    in_code_block = False
+                    code_fence = None
+
+            if in_code_block:
+                if in_directive:
+                    directive_content.append(line)
+                else:
+                    new_lines.append(line)
+                continue
+
+            # Check for closing :::
+            if stripped == ':::' and in_directive:
+                new_lines.extend(
+                    self._render_directive(
+                        directive_type, directive_arg, directive_content
+                    )
+                )
+                in_directive = False
+                directive_type = None
+                directive_arg = None
+                directive_content = []
+                continue
+
+            # Check for opening :::directive
+            if not in_directive:
+                m = self.DIRECTIVE_PATTERN.match(stripped)
+                if m:
+                    in_directive = True
+                    directive_type = m.group(1)
+                    directive_arg = m.group(2)
+                    directive_content = []
+                    continue
+
+            if in_directive:
+                directive_content.append(line)
+            else:
+                new_lines.append(line)
+
+        return new_lines
+
+    def _render_directive(
+        self, dtype: str, arg: str | None, content: list[str]
+    ) -> list[str]:
+        if dtype == 'callout':
+            return self._render_callout(content)
+        elif dtype == 'details':
+            return self._render_details(arg or '', content)
+        # Unknown directive — pass content through
+        return content
+
+    def _render_callout(self, content: list[str]) -> list[str]:
+        # Strip leading/trailing blank lines from content
+        while content and not content[0].strip():
+            content = content[1:]
+        while content and not content[-1].strip():
+            content = content[:-1]
+
+        emoji = None
+        if content:
+            first_line = content[0].strip()
+            emoji, remaining_text = self._extract_emoji(first_line)
+            if emoji:
+                if remaining_text:
+                    content[0] = remaining_text
+                else:
+                    # Emoji was on its own line
+                    content = content[1:]
+                    # Strip blank lines after standalone emoji
+                    while content and not content[0].strip():
+                        content = content[1:]
+
+        out = []
+        if emoji:
+            out.append(f'<div class="callout" data-icon="{emoji}" markdown="1">')
+        else:
+            out.append('<div class="callout" markdown="1">')
+        out.append('')
+        out.extend(content)
+        out.append('')
+        out.append('</div>')
+        return out
+
+    def _render_details(self, summary: str, content: list[str]) -> list[str]:
+        out = []
+        out.append('<details markdown="1">')
+        out.append(f'<summary>{summary}</summary>')
+        out.append('')
+        out.extend(content)
+        out.append('')
+        out.append('</details>')
+        return out
+
+    # Emoji detection: covers symbols (So), and characters that become emoji
+    # with a variation selector (U+FE0F). Ranges cover Miscellaneous Symbols,
+    # Dingbats, Emoticons, Transport/Map, and Supplemental Symbols.
+    _EMOJI_RE = re.compile(
+        r'^([\U0001F300-\U0001FAFF'   # Miscellaneous Symbols and Pictographs..Symbols Extended-A
+        r'\u2600-\u27BF'               # Misc Symbols, Dingbats
+        r'\u2300-\u23FF'               # Misc Technical
+        r'\u2100-\u214F'               # Letterlike Symbols (includes ℹ U+2139)
+        r'\u2B50-\u2B55'               # Stars, circles
+        r'\u203C\u2049'                # Exclamation marks
+        r'\u00A9\u00AE'                # (C) (R)
+        r'][\uFE0F\u200D]*)'
+    )
+
+    @classmethod
+    def _extract_emoji(cls, text: str) -> tuple[str | None, str]:
+        """Extract a leading emoji from text. Returns (emoji, remaining_text)."""
+        if not text:
+            return None, text
+
+        m = cls._EMOJI_RE.match(text)
+        if not m:
+            return None, text
+
+        emoji = m.group(1)
+        rest = text[m.end():].lstrip()
+        return emoji, rest
+
+
+class NotionLinkPreprocessor(Preprocessor):
+    """Strip Notion internal links (pointing to .md files) to plain text."""
+
+    # Matches [text](something.md) or [text](something%20hash.md)
+    NOTION_LINK_PATTERN = re.compile(
+        r'\[([^\]]+)\]\([^)]*\.md\)'
+    )
+
+    def run(self, lines: list[str]) -> list[str]:
+        return [self.NOTION_LINK_PATTERN.sub(r'\1', line) for line in lines]
+
+
+class TaskListPostprocessor(Postprocessor):
+    """Convert [x] and [ ] in list items to HTML checkboxes."""
+
+    def run(self, text: str) -> str:
+        checked = '<input type="checkbox" checked disabled> '
+        unchecked = '<input type="checkbox" disabled> '
+        # Handle both bare <li> and paragraph-wrapped content
+        text = text.replace(
+            '<li>[x] ',
+            f'<li class="task-list-item">{checked}'
+        )
+        text = text.replace(
+            '<li>[ ] ',
+            f'<li class="task-list-item">{unchecked}'
+        )
+        text = text.replace(
+            '<li><p>[x] ',
+            f'<li class="task-list-item"><p>{checked}'
+        )
+        text = text.replace(
+            '<li><p>[ ] ',
+            f'<li class="task-list-item"><p>{unchecked}'
+        )
+        return text
+
+
 class BareAutoLinkInlineProcessor(InlineProcessor):
     """Auto-link bare URLs that aren't already in a link, code span, or angle brackets."""
 
@@ -254,7 +464,16 @@ class CustomEmbedsExtension(Extension):
     def extendMarkdown(self, md: markdown.Markdown) -> None:
         """Register preprocessors, inline patterns, and postprocessors."""
         md.preprocessors.register(
+            AsidePreprocessor(md), "aside_preprocessor", 35
+        )
+        md.preprocessors.register(
+            DirectivePreprocessor(md), "directive_preprocessor", 33
+        )
+        md.preprocessors.register(
             EmbedPreprocessor(md), "embed_preprocessor", 30
+        )
+        md.preprocessors.register(
+            NotionLinkPreprocessor(md), "notion_link_preprocessor", 28
         )
         # Auto-link bare URLs (priority 110, below built-in autolink at 120)
         md.inlinePatterns.register(
@@ -263,6 +482,9 @@ class CustomEmbedsExtension(Extension):
                 md
             ),
             "bare_auto_link", 110
+        )
+        md.postprocessors.register(
+            TaskListPostprocessor(md), "task_list", 25
         )
         md.postprocessors.register(
             CodeBlockPostprocessor(md), "code_highlight", 20
@@ -278,6 +500,7 @@ def create_markdown_processor() -> markdown.Markdown:
             "toc",
             "attr_list",
             "meta",
+            "md_in_html",
             CustomEmbedsExtension(),
         ],
         output_format="html5",

@@ -5,7 +5,14 @@
             <a href="/feed.xml">RSS</a>
         </p>
         <p class="build-info">
-            Built {{ build_time|format_date }}{% if build_hash %} · {{ build_hash }}{% endif %}
+            Built <time class="build-time" datetime="{{ build_time.strftime('%Y-%m-%dT%H:%M:%S') }}">{{ build_time.strftime('%d %b %Y %I:%M:%S %p') }}</time>{% if build_hash %} · {{ build_hash }}{% endif %}
         </p>
     </div>
+    <script>
+    document.querySelectorAll('.build-time').forEach(function(el) {
+        var d = new Date(el.getAttribute('datetime'));
+        el.textContent = d.toLocaleDateString(undefined, {day:'numeric',month:'short',year:'numeric'})
+            + ' ' + d.toLocaleTimeString(undefined, {hour:'numeric',minute:'2-digit',second:'2-digit',timeZoneName:'short'});
+    });
+    </script>
 </footer>

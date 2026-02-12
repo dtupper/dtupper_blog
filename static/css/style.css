@@ -542,10 +542,16 @@ figcaption {
     line-height: 1.4;
     flex-shrink: 0;
 }
-.callout > *:first-child {
+.callout-content {
+    flex: 1;
+    min-width: 0;
+}
+.callout > *:first-child,
+.callout-content > *:first-child {
     margin-top: 0;
 }
-.callout > *:last-child {
+.callout > *:last-child,
+.callout-content > *:last-child {
     margin-bottom: 0;
 }
 

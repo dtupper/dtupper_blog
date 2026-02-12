@@ -27,6 +27,22 @@ Another callout with emoji on its own line:
 This is an informational callout. The emoji appears as a larger icon on the left side of the box.
 :::
 
+A multi-paragraph callout with an emoji icon:
+
+:::callout
+⚠️ **Warning**
+
+This is the first paragraph of a multi-paragraph callout with an emoji icon.
+
+This is the second paragraph. Both should stack _vertically_ beneath the icon, not side by side.
+:::
+
+A callout with an emoji from the Enclosed Alphanumerics block:
+
+:::callout
+🆕 This callout uses an emoji from a different Unicode range to verify broad emoji support.
+:::
+
 ## Callouts from Notion `<aside>` syntax
 
 <aside>

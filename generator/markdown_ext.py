@@ -362,11 +362,14 @@ class DirectivePreprocessor(Preprocessor):
         out = []
         if emoji:
             out.append(f'<div class="callout" data-icon="{emoji}" markdown="1">')
+            out.append('<div class="callout-content" markdown="1">')
         else:
             out.append('<div class="callout" markdown="1">')
         out.append('')
         out.extend(content)
         out.append('')
+        if emoji:
+            out.append('</div>')
         out.append('</div>')
         return out
 
@@ -384,7 +387,7 @@ class DirectivePreprocessor(Preprocessor):
     # with a variation selector (U+FE0F). Ranges cover Miscellaneous Symbols,
     # Dingbats, Emoticons, Transport/Map, and Supplemental Symbols.
     _EMOJI_RE = re.compile(
-        r'^([\U0001F300-\U0001FAFF'   # Miscellaneous Symbols and Pictographs..Symbols Extended-A
+        r'^([\U0001F100-\U0001FAFF'   # Enclosed Alphanumerics Supplement..Symbols Extended-A
         r'\u2600-\u27BF'               # Misc Symbols, Dingbats
         r'\u2300-\u23FF'               # Misc Technical
         r'\u2100-\u214F'               # Letterlike Symbols (includes ℹ U+2139)

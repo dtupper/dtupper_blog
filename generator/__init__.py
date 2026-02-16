@@ -1,3 +1,3 @@
 """Static site generator with rich media embed support."""
 
-__version__ = "2.1.2"
+__version__ = "2.2.0"

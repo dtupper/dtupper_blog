@@ -14,6 +14,8 @@ This is _opinionated software_ -- it is written _for me_ and nobody else. It is 
 
 As such, you might observe weird things, "unPythonic behavior", or mild Geneva Convention violations. 🤷
 
+Diff test.
+
 ## AI Disclosure
 
 Most of this site was constructed using AI coding agents. Specifically:

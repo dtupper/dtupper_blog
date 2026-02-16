@@ -4,6 +4,7 @@ status: Active
 description: A demonstration project showcasing the static site generator
 last_updated: 2026-02-11
 tags: [python, web, open-source]
+enable_diffs: true
 links:
   - label: GitHub
     url: https://github.com/example/project

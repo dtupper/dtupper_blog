@@ -1,0 +1,117 @@
+{% if version_data %}
+<script type="application/json" id="diff-version-data">
+{{ version_data_json|safe }}
+</script>
+
+<div class="diff-viewer-bar" id="diff-viewer-bar">
+    <div class="diff-viewer-inner">
+        <button class="diff-btn" id="diff-prev" title="Previous version">&larr; Prev</button>
+        <span class="diff-info">
+            <span id="diff-version-label">Latest</span>
+            <time class="diff-time" id="diff-time"></time>
+            <span class="diff-meta" id="diff-commit"></span>
+        </span>
+        <button class="diff-btn" id="diff-next" title="Next version">Next &rarr;</button>
+        <label class="diff-toggle">
+            <input type="checkbox" id="diff-show-changes">
+            Show changes
+        </label>
+    </div>
+</div>
+
+<script>
+(function() {
+    'use strict';
+
+    var dataEl = document.getElementById('diff-version-data');
+    if (!dataEl) return;
+
+    var versions = JSON.parse(dataEl.textContent);
+    var total = versions.length;
+    var currentIndex = total - 1;
+    var showChanges = false;
+
+    var contentEl = document.querySelector('.post-content, .page-content');
+    if (!contentEl) return;
+    var originalHTML = contentEl.innerHTML;
+
+    var bar = document.getElementById('diff-viewer-bar');
+    var prevBtn = document.getElementById('diff-prev');
+    var nextBtn = document.getElementById('diff-next');
+    var label = document.getElementById('diff-version-label');
+    var timeEl = document.getElementById('diff-time');
+    var commitEl = document.getElementById('diff-commit');
+    var changesCheckbox = document.getElementById('diff-show-changes');
+
+    function activateLazy(container) {
+        var els = container.querySelectorAll('[data-src]');
+        for (var i = 0; i < els.length; i++) {
+            els[i].setAttribute('src', els[i].getAttribute('data-src'));
+            els[i].removeAttribute('data-src');
+        }
+    }
+
+    function render() {
+        var v = versions[currentIndex];
+        var isLatest = (currentIndex === total - 1);
+
+        if (isLatest) {
+            contentEl.innerHTML = originalHTML;
+        } else if (showChanges && v.diff_html) {
+            contentEl.innerHTML = v.diff_html;
+        } else {
+            contentEl.innerHTML = v.html;
+        }
+
+        activateLazy(contentEl);
+
+        if (isLatest) {
+            label.textContent = 'Version ' + (currentIndex + 1) + ' of ' + total + ' (latest)';
+        } else {
+            label.textContent = 'Version ' + (currentIndex + 1) + ' of ' + total;
+        }
+
+        var d = new Date(v.date);
+        timeEl.setAttribute('datetime', v.date);
+        timeEl.textContent = d.toLocaleDateString(undefined, {
+            day: 'numeric', month: 'short', year: 'numeric'
+        }) + ' ' + d.toLocaleTimeString(undefined, {
+            hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+        });
+
+        commitEl.textContent = v.commit_hash;
+
+        prevBtn.disabled = (currentIndex === 0);
+        nextBtn.disabled = isLatest;
+
+        changesCheckbox.parentElement.style.display =
+            (currentIndex > 0 && versions[currentIndex].diff_html) ? '' : 'none';
+    }
+
+    prevBtn.addEventListener('click', function() {
+        if (currentIndex > 0) { currentIndex--; render(); }
+    });
+
+    nextBtn.addEventListener('click', function() {
+        if (currentIndex < total - 1) { currentIndex++; render(); }
+    });
+
+    changesCheckbox.addEventListener('change', function() {
+        showChanges = this.checked;
+        render();
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        if (e.key === 'ArrowLeft') {
+            if (currentIndex > 0) { currentIndex--; render(); }
+        } else if (e.key === 'ArrowRight') {
+            if (currentIndex < total - 1) { currentIndex++; render(); }
+        }
+    });
+
+    document.body.classList.add('has-diff-viewer');
+    render();
+})();
+</script>
+{% endif %}

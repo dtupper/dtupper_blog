@@ -2,6 +2,7 @@
 title: Markdown Features Test
 description: Testing callouts, collapsible sections, task lists, and more
 status: published
+enable_diffs: true
 ---
 
 # Markdown Features Test

@@ -13,6 +13,8 @@ from jinja2 import ChoiceLoader, Environment, FileSystemLoader
 from slugify import slugify
 
 from .config import SiteConfig, load_config
+from .diff_utils import build_version_json, compute_change_markers, make_lazy
+from .git_history import get_file_history
 from .markdown_ext import process_markdown
 
 
@@ -45,6 +47,8 @@ class ContentItem:
             self.metadata["status"] = "published"
         if "tags" not in self.metadata:
             self.metadata["tags"] = []
+
+        self.enable_diffs = bool(self.metadata.get("enable_diffs", False))
 
         # Normalize last_updated to datetime
         if "last_updated" in self.metadata:
@@ -186,6 +190,48 @@ class SiteBuilder:
         if "blog" in self.content:
             self.content["blog"].sort(key=lambda x: x.date, reverse=True)
 
+    def _build_version_data(self, item: ContentItem) -> list[dict] | None:
+        """Build version history data for a content item.
+
+        Returns None if diffs are disabled or fewer than 2 versions exist.
+        """
+        if not getattr(item, "enable_diffs", False):
+            return None
+
+        versions_raw = get_file_history(item.path, self.config.project_dir)
+        if len(versions_raw) < 2:
+            return None
+
+        # Render each version through the markdown pipeline
+        rendered_versions = []
+        for v in versions_raw:
+            _meta, html = process_markdown(v.content)
+            rendered_versions.append({
+                "html": html,
+                "date": v.date.isoformat(),
+                "commit_hash": v.commit_hash[:7],
+                "author": v.author,
+                "message": v.message,
+            })
+
+        # Compute diffs between consecutive versions
+        for i, v in enumerate(rendered_versions):
+            if i == 0:
+                v["diff_html"] = None
+            else:
+                v["diff_html"] = compute_change_markers(
+                    rendered_versions[i - 1]["html"],
+                    v["html"],
+                )
+
+        # Make all non-latest versions lazy
+        for v in rendered_versions[:-1]:
+            v["html"] = make_lazy(v["html"])
+            if v["diff_html"]:
+                v["diff_html"] = make_lazy(v["diff_html"])
+
+        return rendered_versions
+
     def render_content(self) -> None:
         """Render all content items to HTML files."""
         for section_name, items in self.content.items():
@@ -198,12 +244,19 @@ class SiteBuilder:
                 output_path = self.config.output_dir / item.url / "index.html"
                 output_path.parent.mkdir(parents=True, exist_ok=True)
 
+                # Build version data if diffs are enabled
+                version_data = self._build_version_data(item)
+
                 # Render template
                 html = template.render(
                     content=item,
                     title=item.metadata.get("title"),
                     metadata=item.metadata,
                     body=item.html,
+                    version_data=version_data,
+                    version_data_json=(
+                        build_version_json(version_data) if version_data else None
+                    ),
                 )
                 output_path.write_text(html, encoding="utf-8")
 

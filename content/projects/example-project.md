@@ -16,6 +16,10 @@ links:
 
 This is an example project page demonstrating the project template features.
 
+## Diff Test
+
+Here's a change for the diff feature.
+
 ## Overview
 
 This project demonstrates:

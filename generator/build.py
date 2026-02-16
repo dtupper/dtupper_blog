@@ -4,7 +4,7 @@ import argparse
 import dataclasses
 import shutil
 import subprocess
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from babel.dates import format_date
@@ -136,8 +136,13 @@ class SiteBuilder:
         """Set up global variables and filters for templates."""
         self.env.globals["site"] = self.config.site
         self.env.globals["now"] = datetime.now()
-        self.env.globals["build_time"] = datetime.now()
+        self.env.globals["build_time"] = datetime.now(timezone.utc)
         self.env.globals["build_hash"] = self._get_git_hash()
+
+        # Recency cutoff dates for "recently updated/posted" callouts
+        now = datetime.now()
+        self.env.globals["recently_updated_cutoff"] = now - timedelta(days=self.config.recently_updated_days)
+        self.env.globals["recently_posted_cutoff"] = now - timedelta(days=self.config.recently_posted_days)
 
         # Add date formatting filter
         def format_date_filter(d, format_type="long", locale="en_US"):

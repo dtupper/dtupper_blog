@@ -5,7 +5,7 @@
             <a href="/feed.xml">RSS</a>
         </p>
         <p class="build-info">
-            Built <time class="build-time" datetime="{{ build_time.strftime('%Y-%m-%dT%H:%M:%S') }}">{{ build_time.strftime('%d %b %Y %I:%M:%S %p') }}</time>{% if build_hash %} · {{ build_hash }}{% endif %}
+            Built <time class="build-time" datetime="{{ build_time.strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ build_time.strftime('%d %b %Y %I:%M:%S %p') }} UTC</time>{% if build_hash %} · {{ build_hash }}{% endif %}
         </p>
     </div>
     <script>

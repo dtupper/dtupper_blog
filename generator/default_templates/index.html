@@ -17,7 +17,14 @@
         <div class="posts-list">
             {% for post in posts %}
             <article class="post-preview">
-                <h3><a href="/{{ post.url }}/">{{ post.metadata.title }}</a></h3>
+                <h3>
+                    <a href="/{{ post.url }}/">{{ post.metadata.title }}</a>
+                    {% if post.metadata.last_updated and post.metadata.last_updated >= recently_updated_cutoff %}
+                    <span class="badge badge-updated">Recently Updated</span>
+                    {% elif post.date >= recently_posted_cutoff %}
+                    <span class="badge badge-new">New</span>
+                    {% endif %}
+                </h3>
                 <div class="post-meta">
                     <time datetime="{{ post.date.isoformat() }}">{{ post.date|format_date }}</time>
                     <span class="reading-time">{{ post.reading_time }} min read</span>
@@ -47,7 +54,12 @@
         <div class="projects-grid">
             {% for project in projects %}
             <article class="project-card">
-                <h3><a href="/{{ project.url }}/">{{ project.metadata.title }}</a></h3>
+                <h3>
+                    <a href="/{{ project.url }}/">{{ project.metadata.title }}</a>
+                    {% if project.metadata.last_updated and project.metadata.last_updated >= recently_updated_cutoff %}
+                    <span class="badge badge-updated">Recently Updated</span>
+                    {% endif %}
+                </h3>
                 {% if project.metadata.description %}
                 <p>{{ project.metadata.description }}</p>
                 {% endif %}

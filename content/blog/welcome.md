@@ -1,6 +1,6 @@
 ---
 title: Welcome to My Blog Software
-date: 2024-01-15
+date: 2024-02-14
 tags: [welcome, introduction]
 description: An introduction to my new blog and what to expect
 ---

@@ -111,6 +111,8 @@ site:
 #   date_format: long
 #   posts_per_page: 10
 #   generate_rss: true
+#   recently_updated_days: 7    # Days for "Recently Updated" badge
+#   recently_posted_days: 7     # Days for "New" badge
 ```
 
 ## Custom Markdown Syntax
@@ -146,6 +148,28 @@ For custom attributes (width, height, caption, etc.), use the explicit `::embed`
 ::timestamp[2024-01-15T10:30:00]{locale="en-US" format="long"}
 ```
 
+## Recency Badges
+
+Listing pages (index, blog, projects) and individual post pages automatically show badges for recent content:
+
+- **"New"** badge (`badge-new`): shown on blog posts whose `date` is within `recently_posted_days` (default 7)
+- **"Recently Updated"** badge (`badge-updated`): shown on posts/projects whose `last_updated` frontmatter field is within `recently_updated_days` (default 7). Takes priority over "New" when both apply.
+
+Configure via `site.yaml`:
+
+```yaml
+build:
+  recently_posted_days: 7
+  recently_updated_days: 7
+```
+
+## Testing
+
+```bash
+# Run all tests
+venv/bin/pytest tests/ -v
+```
+
 ## Frontmatter Fields
 
 ```yaml
@@ -156,5 +180,6 @@ tags: [tag1, tag2]
 status: published  # or draft
 description: Short description for meta tags
 slug: custom-url-slug
+last_updated: 2024-06-01    # triggers "Recently Updated" badge if within cutoff
 ---
 ```

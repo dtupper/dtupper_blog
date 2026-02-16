@@ -59,6 +59,8 @@ DEFAULT_BUILD_SETTINGS: dict[str, Any] = {
     "date_format": "long",
     "posts_per_page": 10,
     "generate_rss": True,
+    "recently_updated_days": 7,
+    "recently_posted_days": 7,
 }
 
 
@@ -87,6 +89,8 @@ class SiteConfig:
     date_format: str = "long"
     posts_per_page: int = 10
     generate_rss: bool = True
+    recently_updated_days: int = 7
+    recently_posted_days: int = 7
 
 
 def load_config(project_dir: Path, config_path: Path | None = None) -> SiteConfig:
@@ -150,4 +154,6 @@ def load_config(project_dir: Path, config_path: Path | None = None) -> SiteConfi
         date_format=build.get("date_format", DEFAULT_BUILD_SETTINGS["date_format"]),
         posts_per_page=build.get("posts_per_page", DEFAULT_BUILD_SETTINGS["posts_per_page"]),
         generate_rss=build.get("generate_rss", DEFAULT_BUILD_SETTINGS["generate_rss"]),
+        recently_updated_days=build.get("recently_updated_days", DEFAULT_BUILD_SETTINGS["recently_updated_days"]),
+        recently_posted_days=build.get("recently_posted_days", DEFAULT_BUILD_SETTINGS["recently_posted_days"]),
     )

@@ -76,17 +76,15 @@ class TestRecencyConfig:
         assert config.recently_updated_days == 14
         assert config.recently_posted_days == 3
 
-    def test_cutoff_globals_set(self, tmp_project):
-        """Template globals should include recency cutoff dates."""
+    def test_recency_day_globals_set(self, tmp_project):
+        """Template globals should include recency day windows for browser badges."""
         config = load_config(tmp_project)
         builder = SiteBuilder(config)
-        assert "recently_updated_cutoff" in builder.env.globals
-        assert "recently_posted_cutoff" in builder.env.globals
-        assert isinstance(builder.env.globals["recently_updated_cutoff"], datetime)
-        assert isinstance(builder.env.globals["recently_posted_cutoff"], datetime)
+        assert builder.env.globals["recently_updated_days"] == 7
+        assert builder.env.globals["recently_posted_days"] == 7
 
-    def test_cutoff_uses_configured_days(self, tmp_project):
-        """Cutoff dates should reflect the configured number of days."""
+    def test_recency_day_globals_use_configured_days(self, tmp_project):
+        """Template globals should reflect the configured number of days."""
         (tmp_project / "site.yaml").write_text(textwrap.dedent("""\
             site:
               title: Test Site
@@ -99,17 +97,11 @@ class TestRecencyConfig:
               recently_updated_days: 14
               recently_posted_days: 3
         """))
-        before = datetime.now()
         config = load_config(tmp_project)
         builder = SiteBuilder(config)
-        after = datetime.now()
 
-        updated_cutoff = builder.env.globals["recently_updated_cutoff"]
-        posted_cutoff = builder.env.globals["recently_posted_cutoff"]
-
-        # The cutoff should be approximately now - N days
-        assert (before - timedelta(days=14)) <= updated_cutoff <= (after - timedelta(days=14))
-        assert (before - timedelta(days=3)) <= posted_cutoff <= (after - timedelta(days=3))
+        assert builder.env.globals["recently_updated_days"] == 14
+        assert builder.env.globals["recently_posted_days"] == 3
 
 
 # ─── Feature: "New" badge for recently posted blog entries ───────────
@@ -123,8 +115,9 @@ class TestRecentlyPostedBadge:
         _build(tmp_project)
 
         index_html = (tmp_project / "output" / "blog" / "index.html").read_text()
-        assert "badge-new" in index_html
-        assert "New" in index_html
+        assert "data-recency-badge" in index_html
+        assert f'data-posted-date="{today}"' in index_html
+        assert "badge-new" not in index_html
 
     def test_no_new_badge_on_old_post_in_listing(self, tmp_project):
         """A blog post older than the cutoff should NOT get a 'New' badge."""
@@ -149,7 +142,9 @@ class TestRecentlyPostedBadge:
         assert len(post_pages) >= 1, "Post page should exist"
 
         post_html = post_pages[0].read_text()
-        assert "badge-new" in post_html
+        assert "data-recency-badge" in post_html
+        assert f'data-posted-date="{today}"' in post_html
+        assert "badge-new" not in post_html
 
     def test_no_new_badge_on_old_post_detail_page(self, tmp_project):
         """An old blog post's page should NOT show the 'New' badge."""
@@ -189,7 +184,9 @@ class TestRecentlyPostedBadge:
         _build(tmp_project)
 
         homepage = (tmp_project / "output" / "index.html").read_text()
-        assert "badge-new" in homepage
+        assert "data-recency-badge" in homepage
+        assert f'data-posted-date="{today}"' in homepage
+        assert "badge-new" not in homepage
 
 
 # ─── Feature: "Recently Updated" badge ───────────────────────────────
@@ -205,8 +202,10 @@ class TestRecentlyUpdatedBadge:
         _build(tmp_project)
 
         index_html = (tmp_project / "output" / "blog" / "index.html").read_text()
-        assert "badge-updated" in index_html
-        assert "Recently Updated" in index_html
+        assert "data-recency-badge" in index_html
+        assert f'data-updated-date="{today}"' in index_html
+        assert "badge-updated" not in index_html
+        assert "Recently Updated" not in index_html
 
     def test_updated_badge_takes_priority_over_new(self, tmp_project):
         """If a post is both recent and recently updated, 'Recently Updated' wins."""
@@ -216,8 +215,10 @@ class TestRecentlyUpdatedBadge:
         _build(tmp_project)
 
         index_html = (tmp_project / "output" / "blog" / "index.html").read_text()
-        assert "badge-updated" in index_html
-        # Should NOT also show "New" for the same post
+        assert f'data-posted-date="{today}"' in index_html
+        assert f'data-updated-date="{today}"' in index_html
+        assert "badge-updated" not in index_html
+        # Browser-side script should decide one badge, not static generation.
         assert "badge-new" not in index_html
 
     def test_no_updated_badge_when_stale(self, tmp_project):
@@ -242,7 +243,9 @@ class TestRecentlyUpdatedBadge:
         post_pages = list((tmp_project / "output").rglob("**/updated/index.html"))
         assert len(post_pages) >= 1
         post_html = post_pages[0].read_text()
-        assert "badge-updated" in post_html
+        assert "data-recency-badge" in post_html
+        assert f'data-updated-date="{today}"' in post_html
+        assert "badge-updated" not in post_html
 
     def test_updated_badge_on_project_listing(self, tmp_project):
         """Projects with recent last_updated should show the badge on the listing."""
@@ -253,7 +256,9 @@ class TestRecentlyUpdatedBadge:
         _build(tmp_project)
 
         projects_html = (tmp_project / "output" / "projects" / "index.html").read_text()
-        assert "badge-updated" in projects_html
+        assert "data-recency-badge" in projects_html
+        assert f'data-updated-date="{today}"' in projects_html
+        assert "badge-updated" not in projects_html
 
     def test_no_updated_badge_on_project_without_last_updated(self, tmp_project):
         """Projects without last_updated should not show the badge."""
@@ -305,10 +310,11 @@ class TestMixedScenarios:
 
         index_html = (tmp_project / "output" / "blog" / "index.html").read_text()
 
-        # "New Post" should have badge-new
-        assert "badge-new" in index_html
-        # "Updated Post" should have badge-updated
-        assert "badge-updated" in index_html
+        assert "data-recency-badge" in index_html
+        assert f'data-posted-date="{today}"' in index_html
+        assert f'data-updated-date="{today}"' in index_html
+        assert "badge-new" not in index_html
+        assert "badge-updated" not in index_html
 
         # Verify old post section has neither badge by checking the structure
         # Split by article boundaries and check each one

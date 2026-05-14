@@ -14,6 +14,13 @@
             <span class="last-updated">Updated {{ metadata.last_updated|format_date }}</span>
             {% endif %}
             <span class="reading-time">{{ content.reading_time }} min read</span>
+            <span class="badge"
+                  data-recency-badge
+                  data-posted-date="{{ content.date.date().isoformat() }}"
+                  {% if metadata.last_updated %}data-updated-date="{{ metadata.last_updated.date().isoformat() }}"{% endif %}
+                  data-recently-updated-days="{{ recently_updated_days }}"
+                  data-recently-posted-days="{{ recently_posted_days }}"
+                  hidden></span>
         </div>
         {% if metadata.tags %}
         <div class="tags">

@@ -19,11 +19,13 @@
             <article class="post-preview">
                 <h3>
                     <a href="/{{ post.url }}/">{{ post.metadata.title }}</a>
-                    {% if post.metadata.last_updated and post.metadata.last_updated >= recently_updated_cutoff %}
-                    <span class="badge badge-updated">Recently Updated</span>
-                    {% elif post.date >= recently_posted_cutoff %}
-                    <span class="badge badge-new">New</span>
-                    {% endif %}
+                    <span class="badge"
+                          data-recency-badge
+                          data-posted-date="{{ post.date.date().isoformat() }}"
+                          {% if post.metadata.last_updated %}data-updated-date="{{ post.metadata.last_updated.date().isoformat() }}"{% endif %}
+                          data-recently-updated-days="{{ recently_updated_days }}"
+                          data-recently-posted-days="{{ recently_posted_days }}"
+                          hidden></span>
                 </h3>
                 <div class="post-meta">
                     <time datetime="{{ post.date.isoformat() }}">{{ post.date|format_date }}</time>
@@ -56,8 +58,12 @@
             <article class="project-card">
                 <h3>
                     <a href="/{{ project.url }}/">{{ project.metadata.title }}</a>
-                    {% if project.metadata.last_updated and project.metadata.last_updated >= recently_updated_cutoff %}
-                    <span class="badge badge-updated">Recently Updated</span>
+                    {% if project.metadata.last_updated %}
+                    <span class="badge"
+                          data-recency-badge
+                          data-updated-date="{{ project.metadata.last_updated.date().isoformat() }}"
+                          data-recently-updated-days="{{ recently_updated_days }}"
+                          hidden></span>
                     {% endif %}
                 </h3>
                 {% if project.metadata.description %}

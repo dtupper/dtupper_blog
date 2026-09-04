@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<article class="page">
+    <h1>Page not found</h1>
+    <p>This address may have changed, or the page may no longer be available.</p>
+    <p><a href="{{ site_url('/') }}">Return home</a>{% if section_urls.get('blog') %}
+       or <a href="{{ site_url(section_urls.blog) }}">browse the blog</a>{% endif %}.</p>
+</article>
+{% endblock %}

@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v4
@@ -26,6 +26,27 @@ jobs:
 
       - name: Run tests with coverage
         run: pytest
+
+      - name: Set up Node for badge checks
+        if: matrix.python-version == '3.13'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check browser badge behavior
+        if: matrix.python-version == '3.13'
+        run: node tests/test_recency_badges.cjs
+
+      - name: Build and install wheel
+        run: |
+          python -m pip wheel . --no-deps --wheel-dir dist
+          python -m pip uninstall -y dtupper-site-generator
+          python -m pip install --no-deps dist/*.whl
+
+      - name: Smoke test installed CLI outside checkout
+        run: |
+          cd "$(mktemp -d)"
+          python "$GITHUB_WORKSPACE/scripts/smoke_installed.py"
 
       - name: Upload coverage report
         if: matrix.python-version == '3.12'

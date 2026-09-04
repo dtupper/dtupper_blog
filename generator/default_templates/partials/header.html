@@ -1,9 +1,9 @@
 <header class="site-header">
     <div class="header-content">
-        <a href="/" class="site-title">{{ site.title }}</a>
+        <a href="{{ site_url('/') }}" class="site-title">{{ site.title }}</a>
         <nav class="main-nav">
-            {% for item in site.nav %}
-            <a href="{{ item.url }}">{{ item.label }}</a>
+            {% for item in navigation %}
+            <a href="{{ site_url(item.url) }}">{{ item.label }}</a>
             {% endfor %}
         </nav>
     </div>

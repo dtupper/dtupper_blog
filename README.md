@@ -7,7 +7,8 @@ A Python static site generator that converts Markdown to HTML. Installed as a pi
 - Markdown with YAML frontmatter, code highlighting, and rich media embeds (YouTube, Twitter, Spotify, etc.)
 - Multi-section structure: Blog, Projects, and Pages
 - Responsive design with dark mode
-- RSS feed generation
+- RSS feeds, sitemaps, canonical URLs, and social-preview metadata
+- Paginated section indexes and deployment under a URL prefix
 - Template and static asset override system
 - YAML-based configuration
 
@@ -91,7 +92,7 @@ protected directories. Output symlinks and routes that escape output are rejecte
 Keep only generated files in the output directory: a successful build replaces it
 entirely. An explicitly supplied project or configuration path must exist.
 
-The remaining review work and test guidelines are tracked in
+The completed review work and test guidelines are tracked in
 [`docs/IMPROVEMENT_PLAN.md`](docs/IMPROVEMENT_PLAN.md).
 
 ## Deployment
@@ -108,7 +109,7 @@ Past there, it's up to you to define the content and how it is laid out.
 
 ## Configuration
 
-See [`site.yaml`](site.yaml) for a working example. All fields are optional with sensible defaults. Full reference: [`site.yaml.example`](site.yaml.example).
+All configuration fields are optional with defaults. Full reference: [`site.yaml.example`](site.yaml.example).
 
 ## Content correctness
 
@@ -125,3 +126,41 @@ Otherwise, use published URLs for links between site pages.
 
 Run Python checks with `pytest` and browser badge logic checks with
 `node --test tests/test_recency_badges.cjs`.
+
+## Publishing and templates
+
+Set `site.url` to the complete public base URL, for example
+`https://example.com/journal` or `https://username.github.io/repository`.
+Write site links without that deployment prefix: `/blog/`, `/about/`, and
+`/static/photo.jpg`. Bundled templates and root-relative body links/images add
+the prefix automatically. Custom templates should use `site_url('blog/')` for
+local links and `absolute_url('blog/')` for absolute URLs. External URLs are kept.
+CSS URLs, custom `srcset` values, and JavaScript URLs remain author-controlled.
+
+`build.posts_per_page` controls section pagination. Homepage previews remain five
+posts and three projects. `site.locale` and `build.date_format` control date
+formatting. A zero recency window disables that badge.
+
+Each section can set `index_template` and `index_url`. Setting `index_template:
+null` disables its index. Otherwise empty sections get an empty-state page, and
+later pages use `<index_url>/page/2/`. An omitted index URL is derived from the
+static prefix of `url_pattern`, falling back to the section name. URL patterns
+support `{slug}`, `{year}`, `{month:02d}`, and `{day:02d}`. With `date_in_url: true`,
+year/month are inserted before `{slug}` unless the pattern already contains year
+or month fields.
+
+Default navigation follows configured section index URLs. Navigation omits links
+to local pages that are not generated; links to copied static files and external
+URLs are preserved. Feed links appear only when a feed exists. Custom index templates
+receive `items`, `section`, `pagination`, and the usual page metadata; blog and
+project indexes also retain `posts` and `projects` for compatibility.
+
+Every build includes `sitemap.xml` and `404.html`. The sitemap includes published
+content and indexes, uses authored dates for `lastmod`, and excludes drafts and
+the 404 page. Configure your host to serve `404.html` for missing paths. Add
+`site.image` for a default social-preview image, or frontmatter `image` for a
+page-specific override. Canonical and social URLs use `site.url`.
+
+The repository uses bundled templates directly. Keep only intentional overrides
+in your content repository so bundled improvements remain visible. CI tests both
+the source and a wheel-installed CLI running outside the checkout.

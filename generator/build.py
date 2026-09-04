@@ -6,8 +6,10 @@ import shutil
 import subprocess
 import tempfile
 import warnings
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
+from xml.etree import ElementTree
 
 from babel.dates import format_date
 from feedgen.feed import FeedGenerator
@@ -17,6 +19,7 @@ from slugify import slugify
 from .config import SiteConfig, load_config
 from .dates import parse_date
 from .markdown_ext import process_markdown
+from .urls import SiteURLs
 
 
 class ContentItem:
@@ -93,6 +96,7 @@ class SiteBuilder:
     def __init__(self, config: SiteConfig):
         config.validate_output()
         self.config = config
+        self.urls = SiteURLs(config.site["url"])
         self._staging_dir: Path | None = None
         self.env = self._create_jinja_env()
         self._setup_template_globals()
@@ -140,12 +144,21 @@ class SiteBuilder:
         self.env.globals["recently_posted_days"] = self.config.recently_posted_days
 
         # Add date formatting filter
-        def format_date_filter(d, format_type="long", locale="en_US"):
+        def format_date_filter(d, format_type=None, locale=None):
             if isinstance(d, str):
-                d = datetime.fromisoformat(d)
-            return format_date(d, format=format_type, locale=locale)
+                d = parse_date(d)
+            locale = (locale or self.config.site["locale"]).replace("-", "_")
+            return format_date(d, format=format_type or self.config.date_format, locale=locale)
 
         self.env.filters["format_date"] = format_date_filter
+        self.env.globals["site_url"] = self.urls.local
+        self.env.globals["absolute_url"] = self.urls.absolute
+        self.env.globals["has_feed"] = False
+        self.env.globals["navigation"] = []
+        self.env.globals["section_urls"] = {
+            name: section["index_url"].rstrip("/") + "/"
+            for name, section in self.config.sections.items() if section.get("index_template")
+        }
 
     def clean_output(self) -> None:
         """Remove existing output directory."""
@@ -162,7 +175,9 @@ class SiteBuilder:
     def _output_path(self, relative: str) -> Path:
         root = self.output_dir.resolve()
         path = Path(relative)
-        if path.is_absolute() or ".." in path.parts or "\\" in relative:
+        if (path.is_absolute() or ".." in path.parts or "\\" in relative
+                or any(character in relative for character in "?#%")
+                or urlsplit(relative).scheme):
             raise ValueError(f"Output path must stay inside {root}: {relative!r}")
         destination = root / path
         if not destination.resolve().is_relative_to(root):
@@ -197,27 +212,91 @@ class SiteBuilder:
             items.sort(key=lambda item: item.date or datetime.min.replace(tzinfo=timezone.utc),
                        reverse=True)
 
+    def index_pages(self) -> list[dict]:
+        pages = []
+        for name, section in self.config.sections.items():
+            if not section.get("index_template"):
+                continue
+            items = self.content.get(name, [])
+            page_size = self.config.posts_per_page
+            count = max(1, (len(items) + page_size - 1) // page_size)
+            root = section["index_url"].rstrip("/")
+            def page_url(number):
+                return root + "/" if number == 1 else f"{root}/page/{number}/"
+            for number in range(1, count + 1):
+                pages.append({
+                    "section": name, "url": page_url(number),
+                    "template": section["index_template"],
+                    "items": items[(number - 1) * page_size:number * page_size],
+                    "pagination": {"number": number, "total": count,
+                                   "previous": page_url(number - 1) if number > 1 else None,
+                                   "next": page_url(number + 1) if number < count else None},
+                })
+        return pages
+
     def validate_routes(self) -> None:
         """Reserve generated files and reject collisions before any rendering."""
-        routes = {"index.html": "homepage", "feed.xml": "RSS feed",
-                  "sitemap.xml": "sitemap", "404.html": "404 page"}
-        for section in ("blog", "projects"):
-            routes[f"{section}/index.html"] = f"{section} index"
+        routes = {}
+        def reserve(relative, owner):
+            try:
+                path = self._output_path(relative).relative_to(self.output_dir.resolve())
+            except ValueError as exc:
+                raise ValueError(f"{owner}: {exc}") from exc
+            key = path.as_posix().casefold()
+            if path.parts[0].casefold() == "static":
+                raise ValueError(f"{owner}: route conflicts with static assets")
+            for existing, previous_owner in routes.items():
+                if (key == existing or key.startswith(existing + "/")
+                        or existing.startswith(key + "/")):
+                    raise ValueError(f"Route collision: {owner} and {previous_owner} at {relative}")
+            routes[key] = str(owner)
+
+        for filename in ("index.html", "feed.xml", "sitemap.xml", "404.html"):
+            reserve(filename, f"generated {filename}")
+        for page in self.index_pages():
+            reserve(page["url"] + "index.html", f"{page['section']} index")
         for items in self.content.values():
             for item in items:
-                relative = f"{item.url}/index.html"
-                try:
-                    path = self._output_path(relative).relative_to(self.output_dir.resolve())
-                except ValueError as exc:
-                    raise ValueError(f"{item.path}: {exc}") from exc
-                key = path.as_posix().casefold()
-                if path.parts[0].casefold() == "static":
-                    raise ValueError(f"{item.path}: route conflicts with static assets")
-                for existing, owner in routes.items():
-                    if (key == existing or key.startswith(existing + "/")
-                            or existing.startswith(key + "/")):
-                        raise ValueError(f"Route collision: {item.path} and {owner} at {item.url}")
-                routes[key] = str(item.path)
+                reserve(f"{item.url}/index.html", item.path)
+
+    def page_context(self, url, title, metadata=None):
+        metadata = metadata or {}
+        image = metadata.get("image") or self.config.site.get("image")
+        return {
+            "title": title,
+            "page_description": metadata.get("description") or self.config.site["description"],
+            "canonical_url": self.urls.absolute(url),
+            "social_image": self.urls.absolute(image) if image else None,
+        }
+
+    def setup_navigation(self):
+        self.env.globals["has_feed"] = bool(self.config.generate_rss and self.content.get("blog"))
+        available = {self.urls.local("/"), self.urls.local("404.html"),
+                     self.urls.local("sitemap.xml")}
+        available.update(self.urls.local(page["url"]) for page in self.index_pages())
+        available.update(self.urls.local(item.url + "/")
+                         for items in self.content.values() for item in items)
+        if self.env.globals["has_feed"]:
+            available.add(self.urls.local("feed.xml"))
+        navigation = []
+        for item in self.config.site["nav"]:
+            link = self.urls.local(item["url"])
+            parsed = urlsplit(link)
+            path = parsed.path
+            if path.endswith("/index.html"):
+                path = path.removesuffix("index.html")
+            relative = parsed.path.removeprefix(self.urls.base_path).lstrip("/")
+            static_asset = False
+            if relative.startswith("static/") and ".." not in Path(relative).parts:
+                asset = relative.removeprefix("static/")
+                static_asset = any((directory / asset).is_file() for directory in (
+                    self.config.static_dir, self.config.default_static_dir,
+                ))
+            if parsed.scheme or parsed.netloc or item["url"].startswith(("#", "?")):
+                navigation.append(item)
+            elif path in available or path.rstrip("/") + "/" in available or static_asset:
+                navigation.append(item)
+        self.env.globals["navigation"] = navigation
 
     def render_content(self) -> None:
         """Render all content items to HTML files."""
@@ -237,9 +316,10 @@ class SiteBuilder:
                 # Render template
                 html = template.render(
                     content=item,
-                    title=item.metadata.get("title"),
+                    **self.page_context(item.url + "/", item.metadata["title"], item.metadata),
                     metadata=item.metadata,
-                    body=item.html,
+                    body=self.urls.rewrite_body(item.html),
+                    social_type="article" if item.section == "blog" else "website",
                 )
                 output_path.write_text(html, encoding="utf-8")
 
@@ -250,41 +330,53 @@ class SiteBuilder:
         html = template.render(
             posts=self.content.get("blog", [])[:5],
             projects=self.content.get("projects", [])[:3],
-            title=self.config.site["title"],
+            **self.page_context("/", self.config.site["title"]),
         )
 
         output_path = self._output_path("index.html")
         output_path.write_text(html, encoding="utf-8")
 
     def render_section_indexes(self) -> None:
-        """Render index pages for blog and projects sections."""
-        site_title = self.config.site["title"]
-
-        # Blog index
-        if self.content.get("blog"):
-            template = self.env.get_template("index.html")
+        """Render every configured index, including pagination and empty states."""
+        for page in self.index_pages():
+            section = page["section"]
+            title = section.replace("-", " ").title()
+            number = page["pagination"]["number"]
+            if number > 1:
+                title += f" — Page {number}"
+            template = self.env.get_template(page["template"])
             html = template.render(
-                posts=self.content["blog"],
-                projects=[],
-                title=f"Blog - {site_title}",
-                section="blog",
+                **self.page_context(page["url"], title),
+                posts=page["items"] if section == "blog" else [],
+                projects=page["items"] if section == "projects" else [],
+                section=section, items=page["items"], pagination=page["pagination"],
             )
-            output_path = self._output_path("blog/index.html")
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_text(html, encoding="utf-8")
+            output = self._output_path(page["url"] + "index.html")
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(html, encoding="utf-8")
 
-        # Projects index
-        if self.content.get("projects"):
-            template = self.env.get_template("index.html")
-            html = template.render(
-                posts=[],
-                projects=self.content["projects"],
-                title=f"Projects - {site_title}",
-                section="projects",
-            )
-            output_path = self._output_path("projects/index.html")
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_text(html, encoding="utf-8")
+    def render_404(self):
+        template = self.env.get_template("404.html")
+        html = template.render(title="Page not found", page_description="Page not found",
+                               noindex=True)
+        self._output_path("404.html").write_text(html, encoding="utf-8")
+
+    def generate_sitemap(self):
+        namespace = "http://www.sitemaps.org/schemas/sitemap/0.9"
+        ElementTree.register_namespace("", namespace)
+        root = ElementTree.Element(f"{{{namespace}}}urlset")
+        locations = {"/": None}
+        locations.update({page["url"]: None for page in self.index_pages()})
+        for items in self.content.values():
+            for item in items:
+                locations[item.url + "/"] = item.metadata.get("last_updated") or item.date
+        for location, modified in sorted(locations.items()):
+            entry = ElementTree.SubElement(root, f"{{{namespace}}}url")
+            ElementTree.SubElement(entry, f"{{{namespace}}}loc").text = self.urls.absolute(location)
+            if modified:
+                ElementTree.SubElement(entry, f"{{{namespace}}}lastmod").text = modified.isoformat()
+        ElementTree.ElementTree(root).write(self._output_path("sitemap.xml"), encoding="utf-8",
+                                            xml_declaration=True)
 
     def generate_rss(self) -> None:
         """Generate RSS feed for blog posts."""
@@ -301,9 +393,9 @@ class SiteBuilder:
 
         for post in self.content["blog"][:20]:
             fe = fg.add_entry(order="append")
-            fe.id(f"{site['url']}/{post.url}")
+            fe.id(self.urls.absolute(post.url))
             fe.title(post.metadata["title"])
-            fe.link(href=f"{site['url']}/{post.url}")
+            fe.link(href=self.urls.absolute(post.url + "/"))
             fe.description(post.metadata.get("description", ""))
             fe.published(post.date)
 
@@ -336,6 +428,7 @@ class SiteBuilder:
         print("  Loading and validating content...")
         self.load_content()
         self.validate_routes()
+        self.setup_navigation()
 
         output = self.config.output_dir
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -352,6 +445,8 @@ class SiteBuilder:
             print("  Rendering index pages...")
             self.render_index()
             self.render_section_indexes()
+            self.render_404()
+            self.generate_sitemap()
             print("  Generating RSS feed...")
             self.generate_rss()
             print("  Publishing completed build...")

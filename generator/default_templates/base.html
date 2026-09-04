@@ -4,11 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{{ title }}{% endblock %} - {{ site.title }}</title>
-    <meta name="description" content="{% block description %}{{ site.description }}{% endblock %}">
+    <meta name="description" content="{% block description %}{{ page_description or site.description }}{% endblock %}">
     <meta name="author" content="{{ site.author }}">
-    <link rel="stylesheet" href="/static/css/style.css">
-    <link rel="stylesheet" href="/static/css/custom.css">
-    <link rel="alternate" type="application/rss+xml" title="{{ site.title }} RSS" href="/feed.xml">
+    <link rel="stylesheet" href="{{ site_url('static/css/style.css') }}">
+    <link rel="stylesheet" href="{{ site_url('static/css/custom.css') }}">
+    {% if has_feed %}
+    <link rel="alternate" type="application/rss+xml" title="{{ site.title }} RSS" href="{{ site_url('feed.xml') }}">
+    {% endif %}
+    {% if canonical_url %}
+    <link rel="canonical" href="{{ canonical_url }}">
+    <meta property="og:url" content="{{ canonical_url }}">
+    {% endif %}
+    <meta property="og:title" content="{{ title }}">
+    <meta property="og:description" content="{{ page_description or site.description }}">
+    <meta property="og:site_name" content="{{ site.title }}">
+    <meta property="og:type" content="{{ social_type or 'website' }}">
+    <meta name="twitter:card" content="{{ 'summary_large_image' if social_image else 'summary' }}">
+    {% if social_image %}<meta property="og:image" content="{{ social_image }}">{% endif %}
+    {% if social_type == 'article' and content.date %}
+    <meta property="article:published_time" content="{{ content.date.isoformat() }}">
+    {% endif %}
+    {% if noindex %}<meta name="robots" content="noindex">{% endif %}
     {% block head %}{% endblock %}
 </head>
 <body>
@@ -19,6 +35,6 @@
     </main>
 
     {% include "partials/footer.html" %}
-    <script src="/static/js/recency-badges.js" defer></script>
+    <script src="{{ site_url('static/js/recency-badges.js') }}" defer></script>
 </body>
 </html>

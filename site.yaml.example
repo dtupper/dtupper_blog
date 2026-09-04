@@ -5,7 +5,8 @@ site:
   title: "My Site"                # Site title
   description: ""                 # Meta description
   author: ""                      # Author name
-  url: "http://localhost:8000"    # Production URL
+  url: "http://localhost:8000"    # Full public URL, including any deployment prefix
+  image: ""                       # Optional default social image, e.g. /static/cover.jpg
   language: "en"                  # HTML lang attribute
   locale: "en-US"                 # Date formatting locale (Babel)
   nav:                            # Navigation links
@@ -26,10 +27,14 @@ sections:
   blog:
     url_pattern: "blog/{slug}"
     template: post.html
+    index_template: index.html   # null disables this index
+    index_url: blog              # Defaults to the URL pattern's static prefix
     date_in_url: true             # URLs like /blog/2024/01/my-post/
   projects:
     url_pattern: "projects/{slug}"
     template: project.html
+    index_template: index.html
+    index_url: projects
     date_in_url: false
   pages:
     url_pattern: "{slug}"
@@ -39,5 +44,8 @@ sections:
 # Build settings
 build:
   date_format: long               # Babel format: short, medium, long, full
-  posts_per_page: 10
+  posts_per_page: 10              # Entries per section page; homepage stays 5 posts/3 projects
   generate_rss: true
+  notion_links: false             # Opt in to stripping imported Notion .md links
+  recently_updated_days: 7        # 0 disables this badge
+  recently_posted_days: 7

@@ -1,6 +1,6 @@
 """Validation for author-controlled YAML before a build can publish anything."""
 
-from datetime import date, datetime
+from datetime import date
 
 import yaml
 
@@ -45,7 +45,7 @@ def require_type(value, expected, field: str) -> None:
 
 
 def validate_metadata(metadata: dict) -> None:
-    for field in ("title", "slug", "status"):
+    for field in ("title", "slug", "status", "image"):
         if field in metadata:
             require_type(metadata[field], str, field)
     if metadata.get("description") is not None:

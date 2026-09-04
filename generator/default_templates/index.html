@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{% if section %}{{ section|title }}{% else %}Home{% endif %}{% endblock %}
+{% block title %}{% if section %}{{ title }}{% else %}Home{% endif %}{% endblock %}
 
 {% block content %}
 <div class="container">
@@ -18,7 +18,7 @@
             {% for post in posts %}
             <article class="post-preview">
                 <h3>
-                    <a href="/{{ post.url }}/">{{ post.metadata.title }}</a>
+                    <a href="{{ site_url(post.url + '/') }}">{{ post.metadata.title }}</a>
                     <span class="badge"
                           data-recency-badge
                           data-posted-date="{{ post.date.date().isoformat() }}"
@@ -44,8 +44,8 @@
             </article>
             {% endfor %}
         </div>
-        {% if not section and posts|length > 0 %}
-        <p class="view-all"><a href="/blog/">View all posts &rarr;</a></p>
+        {% if not section and posts|length > 0 and section_urls.get('blog') %}
+        <p class="view-all"><a href="{{ site_url(section_urls.blog) }}">View all posts &rarr;</a></p>
         {% endif %}
     </section>
     {% endif %}
@@ -57,7 +57,7 @@
             {% for project in projects %}
             <article class="project-card">
                 <h3>
-                    <a href="/{{ project.url }}/">{{ project.metadata.title }}</a>
+                    <a href="{{ site_url(project.url + '/') }}">{{ project.metadata.title }}</a>
                     {% if project.metadata.last_updated %}
                     <span class="badge"
                           data-recency-badge
@@ -77,10 +77,30 @@
             </article>
             {% endfor %}
         </div>
-        {% if not section and projects|length > 0 %}
-        <p class="view-all"><a href="/projects/">View all projects &rarr;</a></p>
+        {% if not section and projects|length > 0 and section_urls.get('projects') %}
+        <p class="view-all"><a href="{{ site_url(section_urls.projects) }}">View all projects &rarr;</a></p>
         {% endif %}
     </section>
+    {% endif %}
+    {% if section and section not in ['blog', 'projects'] and items %}
+    <section>
+        <h1>{{ title }}</h1>
+        {% for item in items %}
+        <article class="post-preview">
+            <h2><a href="{{ site_url(item.url + '/') }}">{{ item.metadata.title }}</a></h2>
+            {% if item.date %}<time datetime="{{ item.date.isoformat() }}">{{ item.date|format_date }}</time>{% endif %}
+            {% if item.metadata.description %}<p>{{ item.metadata.description }}</p>{% endif %}
+        </article>
+        {% endfor %}
+    </section>
+    {% endif %}
+    {% if section and not items %}<h1>{{ title }}</h1><p>No entries yet.</p>{% endif %}
+    {% if pagination and pagination.total > 1 %}
+    <nav class="pagination" aria-label="Pagination">
+        {% if pagination.previous %}<a rel="prev" href="{{ site_url(pagination.previous) }}">&larr; Previous</a>{% endif %}
+        <span>Page {{ pagination.number }} of {{ pagination.total }}</span>
+        {% if pagination.next %}<a rel="next" href="{{ site_url(pagination.next) }}">Next &rarr;</a>{% endif %}
+    </nav>
     {% endif %}
 </div>
 {% endblock %}

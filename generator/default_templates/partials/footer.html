@@ -1,9 +1,9 @@
 <footer class="site-footer">
     <div class="footer-content">
         <p>&copy; {{ now.year }} {{ site.author }}. All rights reserved.</p>
-        <p>
-            <a href="/feed.xml">RSS</a>
-        </p>
+        {% if has_feed %}
+        <p><a href="{{ site_url('feed.xml') }}">RSS</a></p>
+        {% endif %}
         <p class="build-info">
             Built <time class="build-time" datetime="{{ build_time.strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ build_time.strftime('%d %b %Y %I:%M:%S %p') }} UTC</time>{% if build_hash %} · {{ build_hash }}{% endif %}
         </p>

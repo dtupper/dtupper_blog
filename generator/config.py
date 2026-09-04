@@ -5,6 +5,9 @@ from importlib import resources as importlib_resources
 from pathlib import Path
 from typing import Any
 
+from babel import Locale, UnknownLocaleError
+
+from .urls import SiteURLs
 from .validation import load_yaml_mapping, require_type, validate_links
 
 
@@ -26,6 +29,7 @@ DEFAULT_SITE_CONFIG: dict[str, Any] = {
     "url": "http://localhost:8000",
     "language": "en",
     "locale": "en-US",
+    "image": "",
     "nav": [
         {"label": "Home", "url": "/"},
         {"label": "Blog", "url": "/blog/"},
@@ -139,7 +143,7 @@ def _validate_config(raw: dict) -> None:
         if name in {".", ".."} or "/" in name or "\\" in name or not name:
             raise ValueError(f"Invalid section name: {name!r}")
         require_type(section, dict, f"sections.{name}")
-        for key in ("url_pattern", "template", "index_template"):
+        for key in ("url_pattern", "template", "index_template", "index_url"):
             if key in section and not (key == "index_template" and section[key] is None):
                 require_type(section[key], str, f"sections.{name}.{key}")
         if "date_in_url" in section:
@@ -185,6 +189,12 @@ def load_config(project_dir: Path, config_path: Path | None = None) -> SiteConfi
 
     # --- Site metadata ---
     site = {**DEFAULT_SITE_CONFIG, **raw.get("site", {})}
+    try:
+        SiteURLs(site["url"])
+        Locale.parse(site["locale"].replace("-", "_"))
+    except (ValueError, UnknownLocaleError) as exc:
+        raise ValueError(f"{config_path}: invalid site URL or locale: {exc}") from exc
+    site["url"] = site["url"].rstrip("/")
 
     # --- Directories (relative to project_dir) ---
     dirs = raw.get("dirs", {})
@@ -210,6 +220,17 @@ def load_config(project_dir: Path, config_path: Path | None = None) -> SiteConfi
             user.setdefault("date_in_url", False)
             user["content_dir"] = content_dir / name
             sections[name] = user
+
+    for name, section in sections.items():
+        prefix = section["url_pattern"].split("{", 1)[0].rstrip("/")
+        section.setdefault("index_url", prefix or name)
+
+    if "nav" not in raw.get("site", {}):
+        site["nav"] = [dict(item) for item in DEFAULT_SITE_CONFIG["nav"]]
+        for item in site["nav"]:
+            name = item["url"].strip("/")
+            if name in sections and sections[name].get("index_template"):
+                item["url"] = "/" + sections[name]["index_url"].strip("/") + "/"
 
     # --- Build settings ---
     build = raw.get("build", {})

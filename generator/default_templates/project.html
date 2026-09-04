@@ -24,7 +24,7 @@
     {% if metadata.links %}
     <div class="project-links">
         {% for link in metadata.links %}
-        <a href="{{ link.url }}" class="project-link" target="_blank" rel="noopener">
+        <a href="{{ site_url(link.url) }}" class="project-link" target="_blank" rel="noopener">
             {{ link.label }}
         </a>
         {% endfor %}
@@ -35,8 +35,10 @@
         {{ body|safe }}
     </div>
 
+    {% if section_urls.get(content.section) %}
     <footer class="project-footer">
-        <p><a href="/projects/">&larr; Back to projects</a></p>
+        <p><a href="{{ site_url(section_urls[content.section]) }}">&larr; Back to {{ content.section }}</a></p>
     </footer>
+    {% endif %}
 </article>
 {% endblock %}

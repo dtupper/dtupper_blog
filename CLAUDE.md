@@ -1,6 +1,6 @@
 # dtupper-site-generator
 
-A Python-based static site generator (v2.0.0) designed as a standalone installable package. Content lives in a separate repository that installs this generator as a dependency.
+A Python-based static site generator (v2.2.0) designed as a standalone installable package. Content lives in a separate repository that installs this generator as a dependency.
 
 ## Architecture
 
@@ -43,11 +43,9 @@ generator/                      # Python package
     └── css/style.css, custom.css
 ```
 
-**Also in repo root (for testing, will move to content repo later):**
-- `site.yaml` - Site configuration
+**Also in repo root:**
+- `site.yaml.example` - Configuration reference
 - `content/` - Sample Markdown content (blog/, projects/, pages/)
-- `templates/` - User template overrides (takes priority over defaults)
-- `static/` - User static overrides (copied on top of defaults)
 
 ## CSS Override Strategy
 
@@ -67,7 +65,7 @@ Content repos can customize styling in three ways:
 
 ### build.py
 - `ContentItem`: represents a single Markdown file; `load(section_config)` parses frontmatter, generates slug/URL
-- `SiteBuilder(config: SiteConfig)`: main builder; `_create_jinja_env()` sets up `ChoiceLoader`; `build()` orchestrates clean → copy static → load content → render → RSS
+- `SiteBuilder(config: SiteConfig)`: main builder; `_create_jinja_env()` sets up `ChoiceLoader`; `build()` orchestrates validate/load → stage static/render/feed/sitemap → replace output with rollback
 - `main()`: argparse CLI entry point (`build-site` command)
 
 ### markdown_ext.py
@@ -183,3 +181,13 @@ slug: custom-url-slug
 last_updated: 2024-06-01    # triggers "Recently Updated" badge if within cutoff
 ---
 ```
+
+## Completed reliability review
+
+See `docs/IMPROVEMENT_PLAN.md` for the three completed phases and the user's test
+rules. Builds use staging and rollback; malformed content fails with filenames.
+Published blogs require dates. Date-only/naive timestamps mean UTC; offsets are
+retained. Conflicting routes are rejected. Notion link stripping is opt-in via
+`build.notion_links`. Templates use `site_url`/`absolute_url` to honor deployment
+prefixes; custom section indexes receive `items` and `pagination`. CI runs Python
+and JavaScript checks plus `scripts/smoke_installed.py` against an installed wheel.

@@ -34,14 +34,17 @@ Your content here...
 ### Required Fields
 
 - `title` - The page title (used in `<title>` and headings)
+- `date` - Required for published blog posts and sections with dated URLs.
 
 ### Optional Fields
 
-- `date` - Publication date (YYYY-MM-DD format)
+- `date` - Optional on undated pages/projects; date-only values mean UTC. ISO timestamps may include an offset.
 - `tags` - List of tags for categorization
 - `description` - Short description for meta tags and previews
 - `status` - `published` (default) or `draft` (drafts are not built)
-- `slug` - Custom URL slug (defaults to filename)
+- `slug` - Custom URL slug (defaults to filename); empty or duplicate routes fail the build.
+- `image` - Social-preview image URL; overrides `site.image`.
+- `last_updated` - Authored modification date for display, recency badges, and sitemap metadata.
 
 ### Project-Specific Fields
 
@@ -244,3 +247,11 @@ python -m http.server -d output 8000
 ```
 
 Then open http://localhost:8000 in your browser.
+
+## Publishing settings
+
+See [the README](../README.md#publishing-and-templates) for pagination, section
+indexes, deployment prefixes, canonical/social metadata, and the sitemap.
+Unclosed `:::callout` and `:::details` blocks fail the build. Literal code is
+preserved during authoring transformations. Notion link stripping requires
+`build.notion_links: true`.

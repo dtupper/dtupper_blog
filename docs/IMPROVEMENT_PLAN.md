@@ -30,6 +30,10 @@ publication instants, and conflicting routes fail before output is replaced.
 
 ## Phase 3: Configuration and publishing polish
 
+Implemented. Configuration controls rendered output, deployment prefixes are
+applied consistently, publishing metadata is generated, and CI checks installed
+wheel assets and CLI behavior outside the checkout.
+
 - Honor or remove ineffective pagination, date-format, locale, and index-template settings.
 - Respect configured section URL patterns and support deployment base paths if needed.
 - Only advertise feeds and section indexes that exist.

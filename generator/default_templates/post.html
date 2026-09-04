@@ -9,14 +9,14 @@
     <header class="post-header">
         <h1>{{ metadata.title }}</h1>
         <div class="post-meta">
-            <time datetime="{{ content.date.isoformat() }}">{{ content.date|format_date }}</time>
+            {% if content.date %}<time datetime="{{ content.date.isoformat() }}">{{ content.date|format_date }}</time>{% endif %}
             {% if metadata.last_updated %}
             <span class="last-updated">Updated {{ metadata.last_updated|format_date }}</span>
             {% endif %}
             <span class="reading-time">{{ content.reading_time }} min read</span>
             <span class="badge"
                   data-recency-badge
-                  data-posted-date="{{ content.date.date().isoformat() }}"
+                  {% if content.date %}data-posted-date="{{ content.date.date().isoformat() }}"{% endif %}
                   {% if metadata.last_updated %}data-updated-date="{{ metadata.last_updated.date().isoformat() }}"{% endif %}
                   data-recently-updated-days="{{ recently_updated_days }}"
                   data-recently-posted-days="{{ recently_posted_days }}"
@@ -35,8 +35,10 @@
         {{ body|safe }}
     </div>
 
+    {% if section_urls.get(content.section) %}
     <footer class="post-footer">
-        <p><a href="/blog/">&larr; Back to blog</a></p>
+        <p><a href="{{ site_url(section_urls[content.section]) }}">&larr; Back to {{ content.section }}</a></p>
     </footer>
+    {% endif %}
 </article>
 {% endblock %}

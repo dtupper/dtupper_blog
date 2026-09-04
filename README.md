@@ -109,3 +109,19 @@ Past there, it's up to you to define the content and how it is laid out.
 ## Configuration
 
 See [`site.yaml`](site.yaml) for a working example. All fields are optional with sensible defaults. Full reference: [`site.yaml.example`](site.yaml.example).
+
+## Content correctness
+
+Published blog posts and sections using dated URLs require an explicit `date`.
+Date-only and timezone-free values mean UTC; timestamps with an offset keep that
+offset for display, URLs, and feeds. Undated pages and projects do not acquire a
+new publication date on each build. Duplicate or empty slugs and collisions with
+generated routes stop the build.
+
+Code examples are protected from embed, aside, and directive transformations.
+Unclosed callouts/details report an error. Notion `.md` link stripping is disabled
+by default; enable `build.notion_links: true` for imported content that needs it.
+Otherwise, use published URLs for links between site pages.
+
+Run Python checks with `pytest` and browser badge logic checks with
+`node --test tests/test_recency_badges.cjs`.

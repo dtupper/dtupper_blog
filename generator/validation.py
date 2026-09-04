@@ -4,6 +4,8 @@ from datetime import date, datetime
 
 import yaml
 
+from .dates import parse_date
+
 
 class UniqueKeyLoader(yaml.SafeLoader):
     """Reject duplicate keys instead of silently replacing earlier values."""
@@ -59,7 +61,7 @@ def validate_metadata(metadata: dict) -> None:
                 continue
             if isinstance(value, str):
                 try:
-                    datetime.fromisoformat(value)
+                    parse_date(value)
                 except ValueError as exc:
                     raise ValueError(f"{field} must be an ISO date or datetime") from exc
             elif not isinstance(value, date):

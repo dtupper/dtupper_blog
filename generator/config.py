@@ -61,6 +61,7 @@ DEFAULT_BUILD_SETTINGS: dict[str, Any] = {
     "generate_rss": True,
     "recently_updated_days": 7,
     "recently_posted_days": 7,
+    "notion_links": False,
 }
 
 
@@ -92,6 +93,7 @@ class SiteConfig:
     recently_updated_days: int = 7
     recently_posted_days: int = 7
     config_path: Path | None = None
+    notion_links: bool = False
 
     def validate_output(self) -> None:
         """Refuse output locations that could replace source or repository files."""
@@ -143,8 +145,9 @@ def _validate_config(raw: dict) -> None:
         if "date_in_url" in section:
             require_type(section["date_in_url"], bool, f"sections.{name}.date_in_url")
     build = raw.get("build", {})
-    if "generate_rss" in build:
-        require_type(build["generate_rss"], bool, "build.generate_rss")
+    for key in ("generate_rss", "notion_links"):
+        if key in build:
+            require_type(build[key], bool, f"build.{key}")
     if "date_format" in build:
         require_type(build["date_format"], str, "build.date_format")
     for key in ("posts_per_page", "recently_updated_days", "recently_posted_days"):
@@ -227,4 +230,5 @@ def load_config(project_dir: Path, config_path: Path | None = None) -> SiteConfi
         recently_updated_days=build.get("recently_updated_days", DEFAULT_BUILD_SETTINGS["recently_updated_days"]),
         recently_posted_days=build.get("recently_posted_days", DEFAULT_BUILD_SETTINGS["recently_posted_days"]),
         config_path=config_path.resolve(),
+        notion_links=build.get("notion_links", False),
     )

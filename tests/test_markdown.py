@@ -148,7 +148,7 @@ class TestNotionLinkPreprocessor:
 
     def test_notion_md_links_stripped(self):
         content = "---\ntitle: T\n---\n\nSee [My Page](some-page.md) for details."
-        _, html = process_markdown(content)
+        _, html = process_markdown(content, notion_links=True)
         assert "My Page" in html
         assert "some-page.md" not in html
         # Should not be a link

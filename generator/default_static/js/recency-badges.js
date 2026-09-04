@@ -18,12 +18,14 @@
             return null;
         }
 
-        return new Date(year, month - 1, day);
+        var date = new Date(year, month - 1, day);
+        return date.getFullYear() === year && date.getMonth() === month - 1
+            && date.getDate() === day ? date : null;
     }
 
     function daysFromDataset(element, key) {
         var value = Number(element.dataset[key]);
-        return Number.isFinite(value) ? value : 7;
+        return Number.isFinite(value) && value >= 0 ? value : 7;
     }
 
     function isRecent(date, days) {
@@ -31,10 +33,12 @@
             return false;
         }
 
-        var cutoff = new Date();
+        var today = new Date();
+        today.setHours(0, 0, 0, 0);
+        var cutoff = new Date(today);
         cutoff.setHours(0, 0, 0, 0);
         cutoff.setDate(cutoff.getDate() - days);
-        return date >= cutoff;
+        return days > 0 && date >= cutoff && date <= today;
     }
 
     function showBadge(element, className, label) {

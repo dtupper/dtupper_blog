@@ -1,17 +1,20 @@
 """Rich media embed processors."""
 
 import re
+from html import escape
+from urllib.parse import quote, urlencode
 from datetime import datetime
 from typing import Any
 from babel.dates import format_datetime
+from babel.core import UnknownLocaleError
 
 
 def process_youtube(video_id: str, attrs: dict[str, str]) -> str:
     """Generate YouTube embed HTML."""
-    width = attrs.get("width", "560")
-    height = attrs.get("height", "315")
+    width = escape(attrs.get("width", "560"))
+    height = escape(attrs.get("height", "315"))
     return f'''<div class="embed embed-youtube">
-<iframe width="{width}" height="{height}" src="https://www.youtube.com/embed/{video_id}"
+<iframe title="Embedded video" width="{width}" height="{height}" src="https://www.youtube.com/embed/{quote(video_id, safe="")}"
 frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
 allowfullscreen loading="lazy"></iframe>
 </div>'''
@@ -19,20 +22,20 @@ allowfullscreen loading="lazy"></iframe>
 
 def process_vimeo(video_id: str, attrs: dict[str, str]) -> str:
     """Generate Vimeo embed HTML."""
-    width = attrs.get("width", "560")
-    height = attrs.get("height", "315")
+    width = escape(attrs.get("width", "560"))
+    height = escape(attrs.get("height", "315"))
     return f'''<div class="embed embed-vimeo">
-<iframe width="{width}" height="{height}" src="https://player.vimeo.com/video/{video_id}"
+<iframe title="Embedded video" width="{width}" height="{height}" src="https://player.vimeo.com/video/{quote(video_id, safe="")}"
 frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen loading="lazy"></iframe>
 </div>'''
 
 
 def process_twitter(tweet_url: str, attrs: dict[str, str]) -> str:
     """Generate Twitter/X embed HTML."""
-    theme = attrs.get("theme", "light")
+    theme = escape(attrs.get("theme", "light"))
     return f'''<div class="embed embed-twitter">
 <blockquote class="twitter-tweet" data-theme="{theme}">
-<a href="{tweet_url}"></a>
+<a href="{escape(tweet_url)}"></a>
 </blockquote>
 <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
 </div>'''
@@ -41,8 +44,8 @@ def process_twitter(tweet_url: str, attrs: dict[str, str]) -> str:
 def process_bluesky(post_url: str, attrs: dict[str, str]) -> str:
     """Generate Bluesky embed HTML."""
     return f'''<div class="embed embed-bluesky">
-<blockquote class="bluesky-embed" data-bluesky-uri="{post_url}">
-<a href="{post_url}">View on Bluesky</a>
+<blockquote class="bluesky-embed" data-bluesky-uri="{escape(post_url)}">
+<a href="{escape(post_url)}">View on Bluesky</a>
 </blockquote>
 <script async src="https://embed.bsky.app/static/embed.js" charset="utf-8"></script>
 </div>'''
@@ -50,25 +53,25 @@ def process_bluesky(post_url: str, attrs: dict[str, str]) -> str:
 
 def process_gist(gist_id: str, attrs: dict[str, str]) -> str:
     """Generate GitHub Gist embed HTML."""
-    file_param = f"?file={attrs['file']}" if "file" in attrs else ""
+    file_param = "?" + escape(urlencode({"file": attrs["file"]})) if "file" in attrs else ""
     return f'''<div class="embed embed-gist">
-<script src="https://gist.github.com/{gist_id}.js{file_param}"></script>
+<script src="https://gist.github.com/{quote(gist_id, safe="/")}.js{file_param}"></script>
 </div>'''
 
 
 def process_codepen(pen_id: str, attrs: dict[str, str]) -> str:
     """Generate CodePen embed HTML."""
-    height = attrs.get("height", "300")
-    theme = attrs.get("theme", "dark")
-    default_tab = attrs.get("tab", "result")
+    height = escape(attrs.get("height", "300"))
     # pen_id format: username/pen_id
     parts = pen_id.split("/")
     if len(parts) != 2:
-        return f'<p class="error">Invalid CodePen ID: {pen_id}</p>'
+        return f'<p class="error">Invalid CodePen ID: {escape(pen_id)}</p>'
     username, pen = parts
+    query = escape(urlencode({"default-tab": attrs.get("tab", "result"),
+                              "theme-id": attrs.get("theme", "dark")}))
     return f'''<div class="embed embed-codepen">
-<iframe height="{height}" style="width: 100%;" scrolling="no"
-src="https://codepen.io/{username}/embed/{pen}?default-tab={default_tab}&theme-id={theme}"
+<iframe title="CodePen example" height="{height}" style="width: 100%;" scrolling="no"
+src="https://codepen.io/{quote(username, safe="")}/embed/{quote(pen, safe="")}?{query}"
 frameborder="no" loading="lazy" allowtransparency="true" allowfullscreen="true">
 </iframe>
 </div>'''
@@ -76,7 +79,7 @@ frameborder="no" loading="lazy" allowtransparency="true" allowfullscreen="true">
 
 def process_spotify(uri: str, attrs: dict[str, str]) -> str:
     """Generate Spotify embed HTML."""
-    height = attrs.get("height", "352")
+    height = escape(attrs.get("height", "352"))
     # Convert spotify:track:xxx to track/xxx format if needed
     if uri.startswith("spotify:"):
         parts = uri.split(":")
@@ -84,8 +87,8 @@ def process_spotify(uri: str, attrs: dict[str, str]) -> str:
             uri = f"{parts[1]}/{parts[2]}"
     # Handle URLs like track/xxx or playlist/xxx
     return f'''<div class="embed embed-spotify">
-<iframe style="border-radius:12px"
-src="https://open.spotify.com/embed/{uri}"
+<iframe title="Spotify player" style="border-radius:12px"
+src="https://open.spotify.com/embed/{quote(uri, safe="/")}"
 width="100%" height="{height}" frameBorder="0" allowfullscreen=""
 allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy">
 </iframe>
@@ -94,14 +97,14 @@ allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-pictur
 
 def process_image(alt_text: str, path: str, attrs: dict[str, str]) -> str:
     """Generate enhanced image HTML with caption support."""
-    caption = attrs.get("caption", "")
-    width = attrs.get("width", "")
-    css_class = attrs.get("class", "")
+    caption = escape(attrs.get("caption", ""))
+    width = escape(attrs.get("width", ""))
+    css_class = escape(attrs.get("class", ""))
 
     width_attr = f' width="{width}"' if width else ""
     class_attr = f' class="image {css_class}"' if css_class else ' class="image"'
 
-    img_html = f'<img src="{path}" alt="{alt_text}"{width_attr} loading="lazy">'
+    img_html = f'<img src="{escape(path)}" alt="{escape(alt_text)}"{width_attr} loading="lazy">'
 
     if caption:
         return f'''<figure{class_attr}>
@@ -131,9 +134,9 @@ def process_timestamp(iso_time: str, attrs: dict[str, str]) -> str:
 
         formatted = format_datetime(dt, format=babel_format, locale=locale.replace("-", "_"))
 
-        return f'<time datetime="{iso_time}">{formatted}</time>'
-    except (ValueError, TypeError) as e:
-        return f'<time datetime="{iso_time}">{iso_time}</time>'
+        return f'<time datetime="{escape(iso_time)}">{escape(formatted)}</time>'
+    except (ValueError, TypeError, UnknownLocaleError):
+        return f'<time datetime="{escape(iso_time)}">{escape(iso_time)}</time>'
 
 
 # Registry of embed processors

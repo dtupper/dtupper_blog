@@ -16,6 +16,9 @@ builds, rollback, and retained backups. The sample content builds through the CL
 
 ## Phase 2: Markdown, dates, and route correctness
 
+Implemented. Literal code and article text are preserved, dates and feeds retain
+publication instants, and conflicting routes fail before output is replaced.
+
 - Detect unclosed callout/details directives instead of discarding content.
 - Preserve fenced, indented, and inline code during Markdown transformations.
 - Remove the redundant Markdown metadata parser; make Notion link cleanup opt-in.

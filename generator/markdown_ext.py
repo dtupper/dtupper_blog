@@ -1,7 +1,8 @@
 """Custom Markdown extensions for rich media embeds and enhanced syntax."""
 
 import re
-import unicodedata
+import uuid
+from html import escape, unescape
 import markdown
 from xml.etree.ElementTree import Element
 from markdown.preprocessors import Preprocessor
@@ -38,6 +39,58 @@ class FrontmatterExtractor:
         if first_line.strip() == "---":
             raise ValueError("Unclosed YAML frontmatter: expected a closing --- line")
         return {}, content
+
+
+class ProtectCodePreprocessor(Preprocessor):
+    """Hide literal code until authoring transformations have finished."""
+
+    INLINE_CODE = re.compile(r"(?<!`)(`+)(?!`)(.*?)(?<!`)\1(?!`)", re.DOTALL)
+
+    def run(self, lines):
+        self.fragments = {}
+        self.prefix = "CODE" + uuid.uuid4().hex
+        output = []
+        index = 0
+        while index < len(lines):
+            line = lines[index]
+            fence = re.match(r"^ {0,3}(`{3,}|~{3,})", line)
+            if fence:
+                start = index
+                delimiter = fence.group(1)
+                closing = re.compile(r"^ {0,3}" + re.escape(delimiter[0])
+                                     + "{" + str(len(delimiter)) + r",}\s*$")
+                index += 1
+                while index < len(lines):
+                    end = closing.match(lines[index])
+                    index += 1
+                    if end:
+                        break
+                output.append(self.store("\n".join(lines[start:index])))
+                continue
+            if line.startswith(("    ", "\t")):
+                output.append(self.store(line))
+            else:
+                output.append(line)
+            index += 1
+        text = "\n".join(output)
+        return self.INLINE_CODE.sub(lambda m: self.store(m.group(0)), text).split("\n")
+
+    def store(self, text):
+        token = f"{self.prefix}X{len(self.fragments)}X"
+        self.fragments[token] = text
+        return token
+
+
+class RestoreCodePreprocessor(Preprocessor):
+    def __init__(self, md, protector):
+        super().__init__(md)
+        self.protector = protector
+
+    def run(self, lines):
+        text = "\n".join(lines)
+        for token, fragment in reversed(list(self.protector.fragments.items())):
+            text = text.replace(token, fragment)
+        return text.split("\n")
 
 
 class EmbedPreprocessor(Preprocessor):
@@ -198,9 +251,9 @@ class EmbedPreprocessor(Preprocessor):
             return attrs
 
         # Pattern for key="value" or key='value'
-        pattern = re.compile(r'(\w+)=["\']([^"\']*)["\']')
+        pattern = re.compile(r'''(\w+)=("([^"]*)"|'([^']*)')''')
         for match in pattern.finditer(attrs_str):
-            attrs[match.group(1)] = match.group(2)
+            attrs[match.group(1)] = match.group(3) if match.group(3) is not None else match.group(4)
 
         return attrs
 
@@ -209,7 +262,7 @@ class CodeBlockPostprocessor(Postprocessor):
     """Apply Pygments syntax highlighting to code blocks."""
 
     CODE_BLOCK_PATTERN = re.compile(
-        r'<pre><code class="language-(\w+)">(.*?)</code></pre>',
+        r'<pre><code class="language-([^"\s]+)">(.*?)</code></pre>',
         re.DOTALL
     )
 
@@ -220,15 +273,10 @@ class CodeBlockPostprocessor(Postprocessor):
             code = match.group(2)
 
             # Unescape HTML entities
-            code = (code
-                .replace("&lt;", "<")
-                .replace("&gt;", ">")
-                .replace("&amp;", "&")
-                .replace("&quot;", '"')
-            )
+            code = unescape(code)
 
             try:
-                lexer = get_lexer_by_name(language, stripall=True)
+                lexer = get_lexer_by_name(language, stripall=False, stripnl=False, ensurenl=False)
             except Exception:
                 try:
                     lexer = guess_lexer(code)
@@ -246,24 +294,11 @@ class AsidePreprocessor(Preprocessor):
     """Convert <aside>...</aside> blocks to :::callout directives."""
 
     def run(self, lines: list[str]) -> list[str]:
-        new_lines = []
-        in_aside = False
-
-        for line in lines:
-            stripped = line.strip()
-
-            if stripped == '<aside>' or stripped == '<aside >':
-                in_aside = True
-                new_lines.append(':::callout')
-                continue
-            elif stripped == '</aside>' and in_aside:
-                in_aside = False
-                new_lines.append(':::')
-                continue
-
-            new_lines.append(line)
-
-        return new_lines
+        return [
+            ':::callout' if line.strip() in ('<aside>', '<aside >')
+            else ':::' if line.strip() == '</aside>' else line
+            for line in lines
+        ]
 
 
 class DirectivePreprocessor(Preprocessor):
@@ -273,64 +308,24 @@ class DirectivePreprocessor(Preprocessor):
     CODE_FENCE_PATTERN = re.compile(r'^(`{3,}|~{3,})')
 
     def run(self, lines: list[str]) -> list[str]:
-        new_lines = []
-        in_code_block = False
-        code_fence = None
-        in_directive = False
-        directive_type = None
-        directive_arg = None
-        directive_content: list[str] = []
-
-        for line in lines:
+        output = []
+        stack = []
+        for number, line in enumerate(lines, 1):
             stripped = line.strip()
-
-            # Track code fences
-            fence_match = self.CODE_FENCE_PATTERN.match(stripped)
-            if fence_match:
-                fence = fence_match.group(1)
-                if not in_code_block:
-                    in_code_block = True
-                    code_fence = fence[0]
-                elif stripped.startswith(code_fence):
-                    in_code_block = False
-                    code_fence = None
-
-            if in_code_block:
-                if in_directive:
-                    directive_content.append(line)
-                else:
-                    new_lines.append(line)
+            opening = self.DIRECTIVE_PATTERN.match(stripped)
+            if opening and opening.group(1) in {"callout", "details"}:
+                stack.append((opening.group(1), opening.group(2), number, []))
                 continue
-
-            # Check for closing :::
-            if stripped == ':::' and in_directive:
-                new_lines.extend(
-                    self._render_directive(
-                        directive_type, directive_arg, directive_content
-                    )
-                )
-                in_directive = False
-                directive_type = None
-                directive_arg = None
-                directive_content = []
+            if stripped == ":::" and stack:
+                dtype, arg, _, content = stack.pop()
+                rendered = self._render_directive(dtype, arg, content)
+                (stack[-1][3] if stack else output).extend(rendered)
                 continue
-
-            # Check for opening :::directive
-            if not in_directive:
-                m = self.DIRECTIVE_PATTERN.match(stripped)
-                if m:
-                    in_directive = True
-                    directive_type = m.group(1)
-                    directive_arg = m.group(2)
-                    directive_content = []
-                    continue
-
-            if in_directive:
-                directive_content.append(line)
-            else:
-                new_lines.append(line)
-
-        return new_lines
+            (stack[-1][3] if stack else output).append(line)
+        if stack:
+            dtype, _, number, _ = stack[-1]
+            raise ValueError(f"Unclosed :::{dtype} directive near body line {number}")
+        return output
 
     def _render_directive(
         self, dtype: str, arg: str | None, content: list[str]
@@ -380,7 +375,7 @@ class DirectivePreprocessor(Preprocessor):
     def _render_details(self, summary: str, content: list[str]) -> list[str]:
         out = []
         out.append('<details markdown="1">')
-        out.append(f'<summary>{summary}</summary>')
+        out.append(f'<summary>{escape(summary)}</summary>')
         out.append('')
         out.extend(content)
         out.append('')
@@ -468,8 +463,15 @@ class BareAutoLinkInlineProcessor(InlineProcessor):
 class CustomEmbedsExtension(Extension):
     """Markdown extension for custom embeds and enhanced features."""
 
+    def __init__(self, *, notion_links=False):
+        self.notion_links = notion_links
+        super().__init__()
+
     def extendMarkdown(self, md: markdown.Markdown) -> None:
         """Register preprocessors, inline patterns, and postprocessors."""
+        protector = ProtectCodePreprocessor(md)
+        md.preprocessors.register(protector, "protect_code", 40)
+        md.preprocessors.register(RestoreCodePreprocessor(md, protector), "restore_code", 27)
         md.preprocessors.register(
             AsidePreprocessor(md), "aside_preprocessor", 35
         )
@@ -479,9 +481,10 @@ class CustomEmbedsExtension(Extension):
         md.preprocessors.register(
             EmbedPreprocessor(md), "embed_preprocessor", 30
         )
-        md.preprocessors.register(
-            NotionLinkPreprocessor(md), "notion_link_preprocessor", 28
-        )
+        if self.notion_links:
+            md.preprocessors.register(
+                NotionLinkPreprocessor(md), "notion_link_preprocessor", 28
+            )
         # Auto-link bare URLs (priority 110, below built-in autolink at 120)
         md.inlinePatterns.register(
             BareAutoLinkInlineProcessor(
@@ -498,7 +501,7 @@ class CustomEmbedsExtension(Extension):
         )
 
 
-def create_markdown_processor() -> markdown.Markdown:
+def create_markdown_processor(*, notion_links=False) -> markdown.Markdown:
     """Create a configured Markdown processor."""
     return markdown.Markdown(
         extensions=[
@@ -506,15 +509,14 @@ def create_markdown_processor() -> markdown.Markdown:
             "tables",
             "toc",
             "attr_list",
-            "meta",
             "md_in_html",
-            CustomEmbedsExtension(),
+            CustomEmbedsExtension(notion_links=notion_links),
         ],
         output_format="html5",
     )
 
 
-def process_markdown(content: str) -> tuple[dict, str]:
+def process_markdown(content: str, *, notion_links=False) -> tuple[dict, str]:
     """Process markdown content and return (metadata, html).
 
     Args:
@@ -527,7 +529,7 @@ def process_markdown(content: str) -> tuple[dict, str]:
     metadata, md_content = FrontmatterExtractor.extract(content)
 
     # Process markdown
-    md = create_markdown_processor()
+    md = create_markdown_processor(notion_links=notion_links)
     html = md.convert(md_content)
 
     return metadata, html

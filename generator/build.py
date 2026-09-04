@@ -15,6 +15,7 @@ from jinja2 import ChoiceLoader, Environment, FileSystemLoader, TemplateError
 from slugify import slugify
 
 from .config import SiteConfig, load_config
+from .dates import parse_date
 from .markdown_ext import process_markdown
 
 
@@ -29,11 +30,11 @@ class ContentItem:
         self.slug: str = ""
         self.url: str = ""
 
-    def load(self, section_config: dict) -> None:
+    def load(self, section_config: dict, *, notion_links=False) -> None:
         """Load and process the markdown file."""
         content = self.path.read_text(encoding="utf-8")
         try:
-            self.metadata, self.html = process_markdown(content)
+            self.metadata, self.html = process_markdown(content, notion_links=notion_links)
         except ValueError as exc:
             raise ValueError(f"{self.path}: {exc}") from exc
 
@@ -41,36 +42,32 @@ class ContentItem:
         self.slug = self.metadata.get("slug", self.path.stem)
         self.slug = slugify(self.slug)
 
-        # Set defaults
-        if "title" not in self.metadata:
-            self.metadata["title"] = self.path.stem.replace("-", " ").title()
-        if "date" not in self.metadata:
-            self.metadata["date"] = datetime.now()
-        if "status" not in self.metadata:
-            self.metadata["status"] = "published"
-        if "tags" not in self.metadata:
-            self.metadata["tags"] = []
+        if not self.slug:
+            raise ValueError(f"{self.path}: slug must contain letters or numbers")
+        self.metadata.setdefault("title", self.path.stem.replace("-", " ").title())
+        self.metadata.setdefault("status", "published")
+        self.metadata.setdefault("tags", [])
+        for field in ("date", "last_updated"):
+            if self.metadata.get(field) is not None:
+                self.metadata[field] = parse_date(self.metadata[field])
 
-        # Normalize last_updated to datetime
-        if "last_updated" in self.metadata:
-            lu = self.metadata["last_updated"]
-            if isinstance(lu, str):
-                self.metadata["last_updated"] = datetime.fromisoformat(lu)
-            elif isinstance(lu, date) and not isinstance(lu, datetime):
-                self.metadata["last_updated"] = datetime.combine(
-                    lu, datetime.min.time()
-                )
+        if not self.is_published:
+            return
+        if (self.section == "blog" or section_config.get("date_in_url")) and not self.date:
+            raise ValueError(f"{self.path}: published posts with dates require an explicit date")
 
-        # Generate URL
-        url_pattern = section_config.get("url_pattern", "{slug}")
-
-        if section_config.get("date_in_url") and self.metadata.get("date"):
-            d = self.metadata["date"]
-            if isinstance(d, str):
-                d = datetime.fromisoformat(d)
-            self.url = f"blog/{d.year}/{d.month:02d}/{self.slug}"
-        else:
-            self.url = url_pattern.format(slug=self.slug)
+        pattern = section_config.get("url_pattern", "{slug}")
+        if section_config.get("date_in_url"):
+            # Preserve the established /blog/YYYY/MM/slug route while honoring prefixes.
+            if "{year" not in pattern and "{month" not in pattern:
+                pattern = pattern.replace("{slug}", "{year}/{month:02d}/{slug}")
+        values = {"slug": self.slug}
+        if self.date:
+            values.update(year=self.date.year, month=self.date.month, day=self.date.day)
+        try:
+            self.url = pattern.format(**values).rstrip("/")
+        except (KeyError, ValueError, IndexError) as exc:
+            raise ValueError(f"{self.path}: invalid URL pattern {pattern!r}: {exc}") from exc
 
     @property
     def is_published(self) -> bool:
@@ -78,16 +75,9 @@ class ContentItem:
         return self.metadata.get("status", "published").strip().lower() != "draft"
 
     @property
-    def date(self) -> datetime:
-        """Get the content date as datetime."""
-        d = self.metadata.get("date")
-        if isinstance(d, datetime):
-            return d
-        if isinstance(d, date):
-            return datetime.combine(d, datetime.min.time())
-        if isinstance(d, str):
-            return datetime.fromisoformat(d)
-        return datetime.now()
+    def date(self) -> datetime | None:
+        """Return the normalized publication date, if one was supplied."""
+        return self.metadata.get("date")
 
     @property
     def reading_time(self) -> int:
@@ -197,15 +187,37 @@ class SiteBuilder:
             if not content_dir.exists():
                 continue
 
-            for md_file in content_dir.glob("*.md"):
+            for md_file in sorted(content_dir.glob("*.md")):
                 item = ContentItem(md_file, section_name)
-                item.load(section_config)
+                item.load(section_config, notion_links=self.config.notion_links)
                 if item.is_published:
                     self.content[section_name].append(item)
 
-        # Sort blog posts by date (newest first)
-        if "blog" in self.content:
-            self.content["blog"].sort(key=lambda x: x.date, reverse=True)
+        for items in self.content.values():
+            items.sort(key=lambda item: item.date or datetime.min.replace(tzinfo=timezone.utc),
+                       reverse=True)
+
+    def validate_routes(self) -> None:
+        """Reserve generated files and reject collisions before any rendering."""
+        routes = {"index.html": "homepage", "feed.xml": "RSS feed",
+                  "sitemap.xml": "sitemap", "404.html": "404 page"}
+        for section in ("blog", "projects"):
+            routes[f"{section}/index.html"] = f"{section} index"
+        for items in self.content.values():
+            for item in items:
+                relative = f"{item.url}/index.html"
+                try:
+                    path = self._output_path(relative).relative_to(self.output_dir.resolve())
+                except ValueError as exc:
+                    raise ValueError(f"{item.path}: {exc}") from exc
+                key = path.as_posix().casefold()
+                if path.parts[0].casefold() == "static":
+                    raise ValueError(f"{item.path}: route conflicts with static assets")
+                for existing, owner in routes.items():
+                    if (key == existing or key.startswith(existing + "/")
+                            or existing.startswith(key + "/")):
+                        raise ValueError(f"Route collision: {item.path} and {owner} at {item.url}")
+                routes[key] = str(item.path)
 
     def render_content(self) -> None:
         """Render all content items to HTML files."""
@@ -288,12 +300,12 @@ class SiteBuilder:
         fg.language(site["language"])
 
         for post in self.content["blog"][:20]:
-            fe = fg.add_entry()
+            fe = fg.add_entry(order="append")
             fe.id(f"{site['url']}/{post.url}")
             fe.title(post.metadata["title"])
             fe.link(href=f"{site['url']}/{post.url}")
             fe.description(post.metadata.get("description", ""))
-            fe.published(post.date.strftime("%Y-%m-%dT%H:%M:%S+00:00"))
+            fe.published(post.date)
 
         rss_path = self._output_path("feed.xml")
         fg.rss_file(str(rss_path))
@@ -323,6 +335,7 @@ class SiteBuilder:
         self.config.validate_output()
         print("  Loading and validating content...")
         self.load_content()
+        self.validate_routes()
 
         output = self.config.output_dir
         output.parent.mkdir(parents=True, exist_ok=True)

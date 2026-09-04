@@ -524,6 +524,7 @@ figcaption {
 .highlight .il { color: #d19a66; }
 
 /* Recency badges */
+.badge[hidden] { display: none; }
 .badge {
     display: inline-block;
     font-size: 0.7rem;

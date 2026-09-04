@@ -4,12 +4,14 @@ import argparse
 import dataclasses
 import shutil
 import subprocess
+import tempfile
+import warnings
 from datetime import date, datetime, timezone
 from pathlib import Path
 
 from babel.dates import format_date
 from feedgen.feed import FeedGenerator
-from jinja2 import ChoiceLoader, Environment, FileSystemLoader
+from jinja2 import ChoiceLoader, Environment, FileSystemLoader, TemplateError
 from slugify import slugify
 
 from .config import SiteConfig, load_config
@@ -30,7 +32,10 @@ class ContentItem:
     def load(self, section_config: dict) -> None:
         """Load and process the markdown file."""
         content = self.path.read_text(encoding="utf-8")
-        self.metadata, self.html = process_markdown(content)
+        try:
+            self.metadata, self.html = process_markdown(content)
+        except ValueError as exc:
+            raise ValueError(f"{self.path}: {exc}") from exc
 
         # Generate slug from filename if not in metadata
         self.slug = self.metadata.get("slug", self.path.stem)
@@ -70,7 +75,7 @@ class ContentItem:
     @property
     def is_published(self) -> bool:
         """Check if content is published (not draft)."""
-        return self.metadata.get("status", "published") != "draft"
+        return self.metadata.get("status", "published").strip().lower() != "draft"
 
     @property
     def date(self) -> datetime:
@@ -96,7 +101,9 @@ class SiteBuilder:
     """Main site builder class."""
 
     def __init__(self, config: SiteConfig):
+        config.validate_output()
         self.config = config
+        self._staging_dir: Path | None = None
         self.env = self._create_jinja_env()
         self._setup_template_globals()
         self.content: dict[str, list[ContentItem]] = {
@@ -152,13 +159,29 @@ class SiteBuilder:
 
     def clean_output(self) -> None:
         """Remove existing output directory."""
+        self.config.validate_output()
         if self.config.output_dir.exists():
             shutil.rmtree(self.config.output_dir)
         self.config.output_dir.mkdir(parents=True)
 
+    @property
+    def output_dir(self) -> Path:
+        """Destination for this build's writes; staging during a full build."""
+        return self._staging_dir or self.config.output_dir
+
+    def _output_path(self, relative: str) -> Path:
+        root = self.output_dir.resolve()
+        path = Path(relative)
+        if path.is_absolute() or ".." in path.parts or "\\" in relative:
+            raise ValueError(f"Output path must stay inside {root}: {relative!r}")
+        destination = root / path
+        if not destination.resolve().is_relative_to(root):
+            raise ValueError(f"Output path must stay inside {root}: {relative!r}")
+        return destination
+
     def copy_static_assets(self) -> None:
         """Copy static assets to output directory with layered override."""
-        dest = self.config.output_dir / "static"
+        dest = self._output_path("static")
         # Copy bundled defaults first
         if self.config.default_static_dir.exists():
             shutil.copytree(self.config.default_static_dir, dest)
@@ -168,10 +191,10 @@ class SiteBuilder:
 
     def load_content(self) -> None:
         """Load all content from content directories."""
+        self.content = {name: [] for name in self.config.sections}
         for section_name, section_config in self.config.sections.items():
             content_dir = section_config["content_dir"]
             if not content_dir.exists():
-                content_dir.mkdir(parents=True)
                 continue
 
             for md_file in content_dir.glob("*.md"):
@@ -193,7 +216,10 @@ class SiteBuilder:
 
             for item in items:
                 # Create output directory structure
-                output_path = self.config.output_dir / item.url / "index.html"
+                try:
+                    output_path = self._output_path(f"{item.url}/index.html")
+                except ValueError as exc:
+                    raise ValueError(f"{item.path}: {exc}") from exc
                 output_path.parent.mkdir(parents=True, exist_ok=True)
 
                 # Render template
@@ -215,7 +241,7 @@ class SiteBuilder:
             title=self.config.site["title"],
         )
 
-        output_path = self.config.output_dir / "index.html"
+        output_path = self._output_path("index.html")
         output_path.write_text(html, encoding="utf-8")
 
     def render_section_indexes(self) -> None:
@@ -231,7 +257,7 @@ class SiteBuilder:
                 title=f"Blog - {site_title}",
                 section="blog",
             )
-            output_path = self.config.output_dir / "blog" / "index.html"
+            output_path = self._output_path("blog/index.html")
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(html, encoding="utf-8")
 
@@ -244,7 +270,7 @@ class SiteBuilder:
                 title=f"Projects - {site_title}",
                 section="projects",
             )
-            output_path = self.config.output_dir / "projects" / "index.html"
+            output_path = self._output_path("projects/index.html")
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(html, encoding="utf-8")
 
@@ -269,31 +295,64 @@ class SiteBuilder:
             fe.description(post.metadata.get("description", ""))
             fe.published(post.date.strftime("%Y-%m-%dT%H:%M:%S+00:00"))
 
-        rss_path = self.config.output_dir / "feed.xml"
+        rss_path = self._output_path("feed.xml")
         fg.rss_file(str(rss_path))
+
+    def _publish(self, staged: Path, backup: Path) -> None:
+        """Replace output, restoring the previous build if installation fails."""
+        self.config.validate_output()
+        output = self.config.output_dir
+        if output.exists():
+            output.rename(backup)
+        try:
+            staged.rename(output)
+        except BaseException:
+            if backup.exists():
+                backup.rename(output)
+            raise
+        if backup.exists():
+            try:
+                shutil.rmtree(backup)
+            except OSError as exc:
+                warnings.warn(f"Site published, but old output remains at {backup}: {exc}")
 
     def build(self) -> None:
         """Execute the full build process."""
         print("Starting build...")
 
-        print("  Cleaning output directory...")
-        self.clean_output()
-
-        print("  Copying static assets...")
-        self.copy_static_assets()
-
-        print("  Loading content...")
+        self.config.validate_output()
+        print("  Loading and validating content...")
         self.load_content()
 
-        print("  Rendering content...")
-        self.render_content()
-
-        print("  Rendering index pages...")
-        self.render_index()
-        self.render_section_indexes()
-
-        print("  Generating RSS feed...")
-        self.generate_rss()
+        output = self.config.output_dir
+        output.parent.mkdir(parents=True, exist_ok=True)
+        workspace = Path(tempfile.mkdtemp(prefix=f".{output.name}-build-", dir=output.parent))
+        staged = workspace / "site"
+        backup = workspace / "previous"
+        try:
+            staged.mkdir()
+            self._staging_dir = staged
+            print("  Copying static assets...")
+            self.copy_static_assets()
+            print("  Rendering content...")
+            self.render_content()
+            print("  Rendering index pages...")
+            self.render_index()
+            self.render_section_indexes()
+            print("  Generating RSS feed...")
+            self.generate_rss()
+            print("  Publishing completed build...")
+            self._publish(staged, backup)
+        finally:
+            self._staging_dir = None
+            # Never remove a backup if restoration or cleanup failed.
+            if backup.exists():
+                warnings.warn(f"Previous output retained at {backup}")
+            else:
+                try:
+                    shutil.rmtree(workspace)
+                except OSError as exc:
+                    warnings.warn(f"Could not remove build workspace {workspace}: {exc}")
 
         # Print summary
         total = sum(len(items) for items in self.content.values())
@@ -333,14 +392,17 @@ def main() -> None:
     project_dir = Path(args.project_dir).resolve()
     config_path = Path(args.config).resolve() if args.config else None
 
-    config = load_config(project_dir, config_path)
+    try:
+        config = load_config(project_dir, config_path)
 
-    # CLI override for output dir
-    if args.output:
-        config = dataclasses.replace(config, output_dir=Path(args.output).resolve())
+        # Keep the final component unresolved so validation can reject symlinks.
+        if args.output:
+            config = dataclasses.replace(config, output_dir=Path(args.output).absolute())
 
-    builder = SiteBuilder(config)
-    builder.build()
+        builder = SiteBuilder(config)
+        builder.build()
+    except (ValueError, OSError, TemplateError) as exc:
+        parser.exit(1, f"build-site: {exc}\n")
 
 
 if __name__ == "__main__":

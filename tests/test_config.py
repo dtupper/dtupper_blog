@@ -145,3 +145,24 @@ class TestSiteConfigDataclass:
         config = load_config(tmp_path)
         assert config.default_templates_dir.exists()
         assert config.default_static_dir.exists()
+
+
+def test_explicit_missing_config_is_an_error(tmp_path):
+    missing = tmp_path / "production.yaml"
+
+    with pytest.raises(ValueError, match="Configuration file does not exist.*production.yaml"):
+        load_config(tmp_path, missing)
+
+
+@pytest.mark.parametrize("yaml_text, message", [
+    ("dirs:\n  output: output\n  output: .\n", "Duplicate YAML key"),
+    ('sections:\n  blog:\n    date_in_url: "false"\n', "date_in_url must be a bool"),
+    ('build:\n  generate_rss: "false"\n', "generate_rss must be a bool"),
+    ("sections:\n  ../private:\n    template: page.html\n", "Invalid section name"),
+])
+def test_dangerous_config_mistakes_report_filename(tmp_path, yaml_text, message):
+    config_path = tmp_path / "site.yaml"
+    config_path.write_text(yaml_text)
+
+    with pytest.raises(ValueError, match=f"site.yaml.*{message}"):
+        load_config(tmp_path)

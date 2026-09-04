@@ -25,9 +25,8 @@ class TestFrontmatterExtractor:
 
     def test_malformed_yaml(self):
         content = "---\n: [invalid yaml\n---\n\nBody."
-        meta, remaining = FrontmatterExtractor.extract(content)
-        assert meta == {}
-        assert remaining.strip() == "Body."
+        with pytest.raises(ValueError, match="Invalid YAML"):
+            FrontmatterExtractor.extract(content)
 
     def test_frontmatter_with_tags_list(self):
         content = "---\ntitle: Post\ntags: [python, web]\n---\n\nBody."

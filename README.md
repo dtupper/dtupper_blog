@@ -74,6 +74,26 @@ build-site /path/to/content-repo    # Build from a specific directory
 build-site -c site.yaml -o dist     # Override config/output paths
 ```
 
+Builds validate configuration and frontmatter before publishing. Invalid YAML,
+duplicate keys, and invalid field types stop the build with a source filename.
+Draft status is case-insensitive; accepted statuses are `published`, `draft`,
+`active`, `completed`, and `archived`.
+
+A full build writes to a temporary directory beside output, then replaces output
+after rendering and RSS generation succeed. If replacement fails, it restores
+the previous site. If restoration also fails, the error output identifies the
+retained backup for manual recovery. The directory replacement uses two renames,
+so it is not a zero-downtime deployment mechanism or protection against a machine
+crash during that switch.
+
+Output must not overlap content, templates, static assets, configuration, or
+protected directories. Output symlinks and routes that escape output are rejected.
+Keep only generated files in the output directory: a successful build replaces it
+entirely. An explicitly supplied project or configuration path must exist.
+
+The remaining review work and test guidelines are tracked in
+[`docs/IMPROVEMENT_PLAN.md`](docs/IMPROVEMENT_PLAN.md).
+
 ## Deployment
 
 See the workflow examples in [`.github/workflows/`](.github/workflows/) for GitHub Pages and Cloudflare Pages.

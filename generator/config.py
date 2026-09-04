@@ -5,7 +5,7 @@ from importlib import resources as importlib_resources
 from pathlib import Path
 from typing import Any
 
-import yaml
+from .validation import load_yaml_mapping, require_type, validate_links
 
 
 def _default_templates_dir() -> Path:
@@ -66,7 +66,7 @@ DEFAULT_BUILD_SETTINGS: dict[str, Any] = {
 
 @dataclasses.dataclass
 class SiteConfig:
-    """Resolved, immutable site configuration."""
+    """Resolved site configuration."""
 
     # Resolved directory paths (all absolute)
     project_dir: Path
@@ -91,6 +91,68 @@ class SiteConfig:
     generate_rss: bool = True
     recently_updated_days: int = 7
     recently_posted_days: int = 7
+    config_path: Path | None = None
+
+    def validate_output(self) -> None:
+        """Refuse output locations that could replace source or repository files."""
+        output = self.output_dir.resolve()
+        project = self.project_dir.resolve()
+        if self.output_dir.is_symlink():
+            raise ValueError(f"Output directory cannot be a symlink: {self.output_dir}")
+        if self.output_dir.exists() and not self.output_dir.is_dir():
+            raise ValueError(f"Output path is not a directory: {self.output_dir}")
+        for protected in (project, Path.home().resolve()):
+            if protected.is_relative_to(output):
+                raise ValueError(f"Unsafe output directory {output}: contains {protected}")
+        inputs = [
+            self.content_dir, self.templates_dir, self.static_dir,
+            self.default_templates_dir, self.default_static_dir, Path(__file__).parent,
+            project / ".git", project / ".agents", project / ".codex",
+            *(section["content_dir"] for section in self.sections.values()),
+        ]
+        if self.config_path is not None:
+            inputs.append(self.config_path)
+        for source in inputs:
+            source = source.resolve()
+            if source.is_relative_to(output) or output.is_relative_to(source):
+                raise ValueError(f"Unsafe output directory {output}: overlaps {source}")
+        if (output / ".git").exists():
+            raise ValueError(f"Output directory contains a Git repository: {output}")
+
+
+def _validate_config(raw: dict) -> None:
+    for field in ("site", "dirs", "sections", "build"):
+        if field in raw:
+            require_type(raw[field], dict, field)
+    for key, value in raw.get("site", {}).items():
+        if key in DEFAULT_SITE_CONFIG and key != "nav":
+            require_type(value, str, f"site.{key}")
+        elif key == "nav":
+            validate_links(value, "site.nav")
+    for key, value in raw.get("dirs", {}).items():
+        require_type(value, str, f"dirs.{key}")
+        if not value.strip():
+            raise ValueError(f"dirs.{key} cannot be empty")
+    for name, section in raw.get("sections", {}).items():
+        if name in {".", ".."} or "/" in name or "\\" in name or not name:
+            raise ValueError(f"Invalid section name: {name!r}")
+        require_type(section, dict, f"sections.{name}")
+        for key in ("url_pattern", "template", "index_template"):
+            if key in section and not (key == "index_template" and section[key] is None):
+                require_type(section[key], str, f"sections.{name}.{key}")
+        if "date_in_url" in section:
+            require_type(section["date_in_url"], bool, f"sections.{name}.date_in_url")
+    build = raw.get("build", {})
+    if "generate_rss" in build:
+        require_type(build["generate_rss"], bool, "build.generate_rss")
+    if "date_format" in build:
+        require_type(build["date_format"], str, "build.date_format")
+    for key in ("posts_per_page", "recently_updated_days", "recently_posted_days"):
+        if key in build:
+            require_type(build[key], int, f"build.{key}")
+            minimum = 1 if key == "posts_per_page" else 0
+            if build[key] < minimum:
+                raise ValueError(f"build.{key} must be at least {minimum}")
 
 
 def load_config(project_dir: Path, config_path: Path | None = None) -> SiteConfig:
@@ -101,14 +163,22 @@ def load_config(project_dir: Path, config_path: Path | None = None) -> SiteConfi
     Resolves all paths relative to project_dir.
     """
     project_dir = project_dir.resolve()
+    if not project_dir.is_dir():
+        raise ValueError(f"Project directory does not exist: {project_dir}")
 
+    explicit_config = config_path is not None
     if config_path is None:
         config_path = project_dir / "site.yaml"
 
     raw: dict[str, Any] = {}
+    if explicit_config and not config_path.is_file():
+        raise ValueError(f"Configuration file does not exist: {config_path}")
     if config_path.exists():
-        with open(config_path) as f:
-            raw = yaml.safe_load(f) or {}
+        try:
+            raw = load_yaml_mapping(config_path.read_text(encoding="utf-8"))
+            _validate_config(raw)
+        except ValueError as exc:
+            raise ValueError(f"{config_path}: {exc}") from exc
 
     # --- Site metadata ---
     site = {**DEFAULT_SITE_CONFIG, **raw.get("site", {})}
@@ -156,4 +226,5 @@ def load_config(project_dir: Path, config_path: Path | None = None) -> SiteConfi
         generate_rss=build.get("generate_rss", DEFAULT_BUILD_SETTINGS["generate_rss"]),
         recently_updated_days=build.get("recently_updated_days", DEFAULT_BUILD_SETTINGS["recently_updated_days"]),
         recently_posted_days=build.get("recently_posted_days", DEFAULT_BUILD_SETTINGS["recently_posted_days"]),
+        config_path=config_path.resolve(),
     )

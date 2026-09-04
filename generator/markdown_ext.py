@@ -2,7 +2,6 @@
 
 import re
 import unicodedata
-import yaml
 import markdown
 from xml.etree.ElementTree import Element
 from markdown.preprocessors import Preprocessor
@@ -14,25 +13,30 @@ from pygments.lexers import get_lexer_by_name, guess_lexer
 from pygments.formatters import HtmlFormatter
 
 from .embeds import EMBED_PROCESSORS, IMAGE_PROCESSOR, match_embed_url
+from .validation import load_yaml_mapping, validate_metadata
 
 
 class FrontmatterExtractor:
     """Extract YAML frontmatter from markdown content."""
 
-    FRONTMATTER_PATTERN = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+    FRONTMATTER_PATTERN = re.compile(
+        r"\A---[^\S\n]*\n(.*?)^---[^\S\n]*(?:\n|\Z)", re.DOTALL | re.MULTILINE
+    )
 
     @classmethod
     def extract(cls, content: str) -> tuple[dict, str]:
         """Extract frontmatter and return (metadata, remaining_content)."""
+        content = content.removeprefix("\ufeff")
         match = cls.FRONTMATTER_PATTERN.match(content)
         if match:
             yaml_str = match.group(1)
-            try:
-                metadata = yaml.safe_load(yaml_str) or {}
-            except yaml.YAMLError:
-                metadata = {}
+            metadata = load_yaml_mapping(yaml_str)
+            validate_metadata(metadata)
             remaining = content[match.end():]
             return metadata, remaining
+        first_line = content.partition("\n")[0]
+        if first_line.strip() == "---":
+            raise ValueError("Unclosed YAML frontmatter: expected a closing --- line")
         return {}, content
 
 

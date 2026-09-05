@@ -1,0 +1,18 @@
+site:
+  title: Field notes
+  description: Experiments, small discoveries, and things worth writing down.
+  author: Alex Morgan
+  url: https://example.com
+  nav:
+    - {label: Home, url: /}
+    - {label: Blog, url: /blog/}
+    - {label: Projects, url: /projects/}
+    - {label: Specimen, url: /specimen/}
+    - {label: Media, url: /media/}
+    - {label: About, url: /about/}
+build:
+  posts_per_page: 3
+sections:
+  notes:
+    template: page.html
+    index_template: index.html

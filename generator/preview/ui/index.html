@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Style lab · Blog generator</title>
+  <link rel="stylesheet" href="/__lab/lab.css">
+  <script src="/__lab/lab.js" defer></script>
+</head>
+<body>
+  <header class="toolbar">
+    <div class="intro"><div><span class="eyebrow">BLOG GENERATOR / WORKSPACE</span><h1>Style lab<span class="dot">.</span></h1></div>
+      <p id="status" role="status">Connecting…</p></div>
+    <div class="controls">
+      <label class="page-control">Page<select id="page" aria-label="Preview page"></select></label>
+      <label>Viewport<select id="viewport"><option value="desktop">Desktop · 1440px</option><option value="tablet">Tablet · 820px</option><option value="mobile">Mobile · 390px</option></select></label>
+      <label>Compare<select id="mode"><option value="schemes">Light / dark</option><option value="reference">Reference / current</option><option value="single">Single preview</option></select></label>
+      <label id="scheme-control" hidden>Scheme<select id="scheme"><option value="light">Light</option><option value="dark">Dark</option></select></label>
+    </div>
+  </header>
+  <div id="error" role="alert" hidden></div>
+  <main>
+    <div class="canvas-heading"><span id="description">Real templates. Live changes.</span><span id="scale-note"></span></div>
+    <div id="previews"></div>
+    <p class="hint">Scroll inside a preview to explore the page. Tab into it to inspect keyboard focus. Changes to content, templates, and CSS rebuild automatically.</p>
+  </main>
+  <footer>Reference = the build when this server started. Preview clock = 15 Jan 2025. Media frames use local placeholders.</footer>
+</body>
+</html>

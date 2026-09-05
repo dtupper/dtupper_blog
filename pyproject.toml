@@ -30,9 +30,11 @@ dev = [
     "black>=24.0",
     "ruff>=0.1",
 ]
+visual = ["playwright>=1.49,<2"]
 
 [project.scripts]
 build-site = "generator.build:main"
+style-lab = "generator.style_lab:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -42,6 +44,7 @@ include = ["generator*"]
 generator = [
     "default_templates/**/*.html",
     "default_static/**/*",
+    "preview/**/*",
 ]
 
 [tool.black]

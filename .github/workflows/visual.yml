@@ -1,0 +1,38 @@
+name: Visual previews
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "generator/**"
+      - "tests/test_style_lab*"
+      - "pyproject.toml"
+      - ".github/workflows/visual.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install generator and browser tools
+        run: |
+          pip install -e ".[dev,visual]"
+          python -m playwright install --with-deps chromium
+      - name: Check preview isolation and browser controls
+        run: pytest tests/test_style_lab.py tests/test_style_lab_browser.py --no-cov
+      - name: Capture fixture matrix
+        run: style-lab --capture .style-lab/ci
+      - name: Upload visual review gallery
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: style-lab-gallery
+          path: .style-lab/ci/
+          include-hidden-files: true

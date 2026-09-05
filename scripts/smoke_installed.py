@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 import generator
+from generator.style_lab import PREVIEW, StyleLab
 
 
 checkout = Path(__file__).resolve().parents[1]
@@ -36,4 +37,18 @@ with tempfile.TemporaryDirectory(prefix="site-wheel-smoke-") as directory:
     assert 'href="/journal/static/css/style.css"' in page
     assert 'href="https://example.com/journal/blog/2024/01/hello/"' in page
 
-print("Installed wheel and CLI smoke test passed.")
+with tempfile.TemporaryDirectory(prefix="style-lab-wheel-smoke-") as directory:
+    root = Path(directory)
+    lab = StyleLab(root, PREVIEW)
+    assert lab.error is None
+    for relative in (
+        "__lab/index.html", "__lab/lab.js", "__lab/lab.css", "__lab/clock.js",
+        "__lab/media.html", "__lab/report.html", "current/specimen/index.html",
+        "current/media/index.html", "current/static/landscape.svg",
+        "reference/blog/page/2/index.html",
+    ):
+        assert (root / relative).is_file(), f"Wheel style lab is missing {relative}"
+    cli = Path(sys.executable).with_name("style-lab")
+    subprocess.run([str(cli), "--help"], cwd=root, check=True, capture_output=True)
+
+print("Installed wheel, build CLI, and style lab smoke tests passed.")

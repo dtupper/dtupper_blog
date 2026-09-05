@@ -28,9 +28,10 @@
     {% block head %}{% endblock %}
 </head>
 <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
     {% include "partials/header.html" %}
 
-    <main class="main-content">
+    <main class="main-content" id="main-content" tabindex="-1">
         {% block content %}{% endblock %}
     </main>
 

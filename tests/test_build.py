@@ -183,8 +183,8 @@ class TestSiteBuilderRendering:
             write_project(tmp_project, f"proj{i}.md", f"Project {i}", "2024-01-01")
         builder = build(tmp_project)
         homepage = (tmp_project / "output" / "index.html").read_text()
-        # Homepage should have at most 3 projects
-        assert homepage.count("project-card") <= 3
+        # Count cards themselves, not metadata elements with a related class name.
+        assert homepage.count('class="project-card"') == 3
 
     def test_section_index_rendered(self, tmp_project):
         write_post(tmp_project, "post.md", "A Post", "2024-01-15")

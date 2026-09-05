@@ -1,9 +1,11 @@
 <header class="site-header">
     <div class="header-content">
         <a href="{{ site_url('/') }}" class="site-title">{{ site.title }}</a>
-        <nav class="main-nav">
+        <nav class="main-nav" aria-label="Main navigation">
             {% for item in navigation %}
-            <a href="{{ site_url(item.url) }}">{{ item.label }}</a>
+            {% set nav_url = absolute_url(item.url).rstrip('/') %}
+            {% set page_url = (canonical_url|default('', true)).rstrip('/') %}
+            <a href="{{ site_url(item.url) }}"{% if page_url == nav_url %} aria-current="page"{% elif nav_url != absolute_url('/').rstrip('/') and page_url.startswith(nav_url + '/') %} aria-current="location"{% endif %}>{{ item.label }}</a>
             {% endfor %}
         </nav>
     </div>

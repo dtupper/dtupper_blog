@@ -13,12 +13,13 @@
 
     {% if posts %}
     <section class="posts-section">
-        <h2>{% if section == 'blog' %}All Posts{% else %}Recent Posts{% endif %}</h2>
+        {% if section == 'blog' %}<h1 class="archive-title">All Posts</h1>{% else %}<h2 class="section-heading">Recent Posts</h2>{% endif %}
         <div class="posts-list">
             {% for post in posts %}
             <article class="post-preview">
-                <h3>
-                    <a href="{{ site_url(post.url + '/') }}">{{ post.metadata.title }}</a>
+                <div class="post-meta">
+                    <time datetime="{{ post.date.isoformat() }}">{{ post.date|format_date }}</time>
+                    <span class="reading-time">{{ post.reading_time }} min read</span>
                     <span class="badge"
                           data-recency-badge
                           data-posted-date="{{ post.date.date().isoformat() }}"
@@ -26,11 +27,8 @@
                           data-recently-updated-days="{{ recently_updated_days }}"
                           data-recently-posted-days="{{ recently_posted_days }}"
                           hidden></span>
-                </h3>
-                <div class="post-meta">
-                    <time datetime="{{ post.date.isoformat() }}">{{ post.date|format_date }}</time>
-                    <span class="reading-time">{{ post.reading_time }} min read</span>
                 </div>
+                <h3><a href="{{ site_url(post.url + '/') }}">{{ post.metadata.title }}</a></h3>
                 {% if post.metadata.description %}
                 <p class="post-excerpt">{{ post.metadata.description }}</p>
                 {% endif %}
@@ -52,12 +50,22 @@
 
     {% if projects %}
     <section class="projects-section">
-        <h2>{% if section == 'projects' %}All Projects{% else %}Featured Projects{% endif %}</h2>
+        {% if section == 'projects' %}<h1 class="archive-title">All Projects</h1>{% else %}<h2 class="section-heading">Featured Projects</h2>{% endif %}
         <div class="projects-grid">
             {% for project in projects %}
             <article class="project-card">
                 <h3>
                     <a href="{{ site_url(project.url + '/') }}">{{ project.metadata.title }}</a>
+                </h3>
+                {% if project.metadata.description %}
+                <p>{{ project.metadata.description }}</p>
+                {% endif %}
+                <div class="project-card-meta">
+                    {% if project.metadata.status %}
+                    <span class="project-status status-{{ project.metadata.status|lower }}">
+                        {{ project.metadata.status }}
+                    </span>
+                    {% endif %}
                     {% if project.metadata.last_updated %}
                     <span class="badge"
                           data-recency-badge
@@ -65,15 +73,7 @@
                           data-recently-updated-days="{{ recently_updated_days }}"
                           hidden></span>
                     {% endif %}
-                </h3>
-                {% if project.metadata.description %}
-                <p>{{ project.metadata.description }}</p>
-                {% endif %}
-                {% if project.metadata.status %}
-                <span class="project-status status-{{ project.metadata.status|lower }}">
-                    {{ project.metadata.status }}
-                </span>
-                {% endif %}
+                </div>
             </article>
             {% endfor %}
         </div>

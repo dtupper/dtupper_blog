@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Style lab · Screenshot review</title>
+<style>
+  body { margin: 24px; background: #edf0ed; color: #263c34; font: 14px/1.6 system-ui, sans-serif; }
+  h1 { margin-bottom: 4px; } select { padding: 8px; margin: 6px; max-width: 90vw; }
+  .pair { display: flex; align-items: start; gap: 20px; } figure { flex: 1; min-width: 0; margin: 0; }
+  img { width: 100%; height: auto; border: 1px solid #bfcac3; } figcaption { margin: 8px 0; }
+  #findings { color: #843925; white-space: pre-wrap; } a { color: #286855; }
+</style></head><body>
+<h1>Screenshot review</h1>
+<p>Full-page captures · Chromium · UTC · 1× pixels · fixed preview clock. Click an image to inspect at full resolution.</p>
+<label>Case <select id="case"></select></label><p id="findings" role="status"></p><div id="images" class="pair"></div>
+<script>
+const manifest = /* MANIFEST */[];
+const select = document.getElementById("case");
+manifest.forEach((row, i) => select.add(new Option(`${row.label} / ${row.viewport} / ${row.scheme}${row.overflow || row.errors.length || row.brokenImages.length ? " ⚠" : ""}`, i)));
+function show() {
+  const row = manifest[select.value];
+  if (!row) return;
+  document.getElementById("findings").textContent = [row.overflow ? "Horizontal page overflow detected." : "", ...row.errors, ...row.brokenImages.map(src => "Broken image: " + src)].filter(Boolean).join("\n") || "No page overflow, JavaScript errors, or broken images detected. Visual review is still required.";
+  const images = document.getElementById("images"); images.replaceChildren();
+  for (const [label, source] of [["Reference", row.reference], ["Current", row.image]]) {
+    if (!source) continue;
+    const figure = document.createElement("figure"), caption = document.createElement("figcaption"), link = document.createElement("a"), image = document.createElement("img");
+    caption.textContent = `${label} · ${row.viewport} / ${row.scheme}`;
+    image.src = source; image.alt = `${label}: ${row.label}`;
+    link.href = source; link.target = "_blank"; link.append(image); figure.append(caption, link); images.append(figure);
+  }
+}
+select.onchange = show; show();
+</script></body></html>

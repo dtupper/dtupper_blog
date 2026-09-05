@@ -127,6 +127,73 @@ Otherwise, use published URLs for links between site pages.
 Run Python checks with `pytest` and browser badge logic checks with
 `node --test tests/test_recency_badges.cjs`.
 
+## Visual style lab
+
+Run the generator's real templates against a fixture site, with live rebuilds,
+light/dark comparison, and desktop, tablet, and mobile viewports:
+
+```bash
+pip install -e ".[dev]"
+style-lab
+# Open http://127.0.0.1:8765
+```
+
+Choose **Reference / current** to compare edits against the build from server
+startup. Edit `generator/default_static/css/style.css`, `custom.css`, or the
+bundled templates and the preview refreshes. The reference stays fixed until you
+restart the server. The lab writes only to temporary directories and leaves
+production output alone.
+
+```bash
+style-lab --css /path/to/experiment.css  # Try an additional CSS override
+style-lab --project /path/to/content-repo  # Preview your own content and overrides
+```
+
+For full-page screenshots and a portable before/after review gallery:
+
+```bash
+pip install -e ".[visual]"
+python -m playwright install chromium
+style-lab --capture .style-lab/before
+# Make styling changes, then:
+style-lab --capture .style-lab/after --baseline .style-lab/before
+# Open .style-lab/after/index.html
+```
+
+See [the style lab guide](docs/STYLE_LAB.md) for fixture coverage, browser checks,
+capture filters, and preview limitations.
+
+## Using the default theme in a content repo
+
+The editorial styling is the bundled default, including automatic light/dark
+mode based on the reader's system preference. No theme setting is needed in
+`site.yaml`.
+
+For local development, activate your content repo's virtual environment, install
+an editable checkout of this generator, and build from the content repo:
+
+```bash
+python -m pip install -e /path/to/dtupper_blog
+build-site
+style-lab --project .
+```
+
+An editable install picks up generator CSS and template edits immediately; rebuild
+to update the generated site. For deployment, push the generator commit and pin
+that commit in the content repo's dependency file:
+
+```text
+dtupper-site-generator @ git+https://github.com/dtupper/dtupper_blog.git@COMMIT_SHA
+```
+
+Existing overrides take precedence. Rename or remove stale copies of
+`static/css/style.css` and bundled files under `templates/` to inherit the new
+defaults, preserving intentional customizations. Review `static/css/custom.css`
+for rules that mask the new styles. Keep future small CSS adjustments there;
+variables such as `--font-serif` and `--reading-width` can be overridden without
+copying the full stylesheet. Honor any custom `dirs.static` or `dirs.templates`
+paths configured in `site.yaml`.
+
 ## Publishing and templates
 
 Set `site.url` to the complete public base URL, for example

@@ -18,7 +18,7 @@ from slugify import slugify
 
 from .config import SiteConfig, load_config
 from .dates import parse_date
-from .markdown_ext import process_markdown
+from .markdown_ext import process_markdown_with_toc
 from .urls import SiteURLs
 
 
@@ -30,6 +30,7 @@ class ContentItem:
         self.section = section
         self.metadata: dict = {}
         self.html: str = ""
+        self.toc: list[dict] = []
         self.slug: str = ""
         self.url: str = ""
 
@@ -37,7 +38,8 @@ class ContentItem:
         """Load and process the markdown file."""
         content = self.path.read_text(encoding="utf-8")
         try:
-            self.metadata, self.html = process_markdown(content, notion_links=notion_links)
+            self.metadata, self.html, self.toc = process_markdown_with_toc(
+                content, notion_links=notion_links)
         except ValueError as exc:
             raise ValueError(f"{self.path}: {exc}") from exc
 
@@ -319,6 +321,7 @@ class SiteBuilder:
                     **self.page_context(item.url + "/", item.metadata["title"], item.metadata),
                     metadata=item.metadata,
                     body=self.urls.rewrite_body(item.html),
+                    toc=item.toc,
                     social_type="article" if item.section == "blog" else "website",
                 )
                 output_path.write_text(html, encoding="utf-8")
@@ -327,9 +330,13 @@ class SiteBuilder:
         """Render the homepage."""
         template = self.env.get_template("index.html")
 
+        blog = self.content.get("blog", [])
+        projects = self.content.get("projects", [])
         html = template.render(
-            posts=self.content.get("blog", [])[:5],
-            projects=self.content.get("projects", [])[:3],
+            posts=blog[:5],
+            projects=projects[:3],
+            total_posts=len(blog),
+            total_projects=len(projects),
             **self.page_context("/", self.config.site["title"]),
         )
 

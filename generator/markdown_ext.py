@@ -516,6 +516,38 @@ def create_markdown_processor(*, notion_links=False) -> markdown.Markdown:
     )
 
 
+def top_level_toc(tokens: list[dict]) -> list[dict]:
+    """Flatten toc tokens to the shallowest heading level, in document order.
+
+    Headings that precede a shallower one end up at the top of the tree too, so
+    the tree is walked and every token at the minimum level is collected.
+    """
+    flat = []
+
+    def walk(items):
+        for token in items:
+            flat.append(token)
+            walk(token["children"])
+
+    walk(tokens)
+    if not flat:
+        return []
+    shallowest = min(token["level"] for token in flat)
+    # Names arrive already HTML-escaped by Markdown, so templates must not escape again.
+    return [{"id": token["id"], "name": token["name"]}
+            for token in flat if token["level"] == shallowest]
+
+
+def process_markdown_with_toc(content: str, *, notion_links=False) -> tuple[dict, str, list[dict]]:
+    """Process markdown content and return (metadata, html, toc entries)."""
+    metadata, md_content = FrontmatterExtractor.extract(content)
+
+    md = create_markdown_processor(notion_links=notion_links)
+    html = md.convert(md_content)
+
+    return metadata, html, top_level_toc(md.toc_tokens)
+
+
 def process_markdown(content: str, *, notion_links=False) -> tuple[dict, str]:
     """Process markdown content and return (metadata, html).
 
@@ -525,11 +557,5 @@ def process_markdown(content: str, *, notion_links=False) -> tuple[dict, str]:
     Returns:
         Tuple of (metadata dict, rendered HTML string)
     """
-    # Extract frontmatter
-    metadata, md_content = FrontmatterExtractor.extract(content)
-
-    # Process markdown
-    md = create_markdown_processor(notion_links=notion_links)
-    html = md.convert(md_content)
-
+    metadata, html, _ = process_markdown_with_toc(content, notion_links=notion_links)
     return metadata, html

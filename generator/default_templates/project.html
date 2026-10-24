@@ -8,18 +8,21 @@
 <article class="project">
     <header class="project-header">
         <h1>{{ metadata.title }}</h1>
-        {% if metadata.status %}
-        <span class="project-status status-{{ metadata.status|lower }}">
-            {{ metadata.status }}
-        </span>
-        {% endif %}
-        {% if metadata.description %}
-        <p class="lead">{{ metadata.description }}</p>
-        {% endif %}
         {% if metadata.last_updated %}
         <p class="last-updated">Last updated {{ metadata.last_updated|format_date }}</p>
         {% endif %}
     </header>
+
+    {% if toc|length >= 3 %}
+    <nav class="toc" aria-label="Contents">
+        <ol>
+            {% for entry in toc %}
+            {# Names are already escaped by Markdown #}
+            <li><a href="#{{ entry.id }}">{{ entry.name|safe }}</a></li>
+            {% endfor %}
+        </ol>
+    </nav>
+    {% endif %}
 
     {% if metadata.links %}
     <div class="project-links">

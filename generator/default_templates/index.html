@@ -4,50 +4,6 @@
 
 {% block content %}
 <div class="container">
-    {% if not section %}
-    <section class="hero">
-        <h1>{{ site.title }}</h1>
-        <p class="lead">{{ site.description }}</p>
-    </section>
-    {% endif %}
-
-    {% if posts %}
-    <section class="posts-section">
-        {% if section == 'blog' %}<h1 class="archive-title">All Posts</h1>{% else %}<h2 class="section-heading">Recent Posts</h2>{% endif %}
-        <div class="posts-list">
-            {% for post in posts %}
-            <article class="post-preview">
-                <div class="post-meta">
-                    <time datetime="{{ post.date.isoformat() }}">{{ post.date|format_date }}</time>
-                    <span class="reading-time">{{ post.reading_time }} min read</span>
-                    <span class="badge"
-                          data-recency-badge
-                          data-posted-date="{{ post.date.date().isoformat() }}"
-                          {% if post.metadata.last_updated %}data-updated-date="{{ post.metadata.last_updated.date().isoformat() }}"{% endif %}
-                          data-recently-updated-days="{{ recently_updated_days }}"
-                          data-recently-posted-days="{{ recently_posted_days }}"
-                          hidden></span>
-                </div>
-                <h3><a href="{{ site_url(post.url + '/') }}">{{ post.metadata.title }}</a></h3>
-                {% if post.metadata.description %}
-                <p class="post-excerpt">{{ post.metadata.description }}</p>
-                {% endif %}
-                {% if post.metadata.tags %}
-                <div class="tags">
-                    {% for tag in post.metadata.tags %}
-                    <span class="tag">{{ tag }}</span>
-                    {% endfor %}
-                </div>
-                {% endif %}
-            </article>
-            {% endfor %}
-        </div>
-        {% if not section and posts|length > 0 and section_urls.get('blog') %}
-        <p class="view-all"><a href="{{ site_url(section_urls.blog) }}">View all posts &rarr;</a></p>
-        {% endif %}
-    </section>
-    {% endif %}
-
     {% if projects %}
     <section class="projects-section">
         {% if section == 'projects' %}<h1 class="archive-title">All Projects</h1>{% else %}<h2 class="section-heading">Featured Projects</h2>{% endif %}
@@ -77,8 +33,44 @@
             </article>
             {% endfor %}
         </div>
-        {% if not section and projects|length > 0 and section_urls.get('projects') %}
+        {% if not section and total_projects > projects|length and section_urls.get('projects') %}
         <p class="view-all"><a href="{{ site_url(section_urls.projects) }}">View all projects &rarr;</a></p>
+        {% endif %}
+    </section>
+    {% endif %}
+
+    {% if posts %}
+    <section class="posts-section">
+        {% if section == 'blog' %}<h1 class="archive-title">All Posts</h1>{% else %}<h2 class="section-heading">Recent Posts</h2>{% endif %}
+        <div class="posts-list">
+            {% for post in posts %}
+            <article class="post-preview">
+                <div class="post-meta">
+                    <time datetime="{{ post.date.isoformat() }}">{{ post.date|format_date }}</time>
+                    <span class="badge"
+                          data-recency-badge
+                          data-posted-date="{{ post.date.date().isoformat() }}"
+                          {% if post.metadata.last_updated %}data-updated-date="{{ post.metadata.last_updated.date().isoformat() }}"{% endif %}
+                          data-recently-updated-days="{{ recently_updated_days }}"
+                          data-recently-posted-days="{{ recently_posted_days }}"
+                          hidden></span>
+                </div>
+                <h3><a href="{{ site_url(post.url + '/') }}">{{ post.metadata.title }}</a></h3>
+                {% if post.metadata.description %}
+                <p class="post-excerpt">{{ post.metadata.description }}</p>
+                {% endif %}
+                {% if post.metadata.tags %}
+                <div class="tags">
+                    {% for tag in post.metadata.tags %}
+                    <span class="tag">{{ tag }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </article>
+            {% endfor %}
+        </div>
+        {% if not section and total_posts > posts|length and section_urls.get('blog') %}
+        <p class="view-all"><a href="{{ site_url(section_urls.blog) }}">View all posts &rarr;</a></p>
         {% endif %}
     </section>
     {% endif %}

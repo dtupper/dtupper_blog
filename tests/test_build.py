@@ -186,6 +186,45 @@ class TestSiteBuilderRendering:
         # Count cards themselves, not metadata elements with a related class name.
         assert homepage.count('class="project-card"') == 3
 
+    def test_view_all_only_when_home_list_is_truncated(self, tmp_project):
+        for i in range(5):
+            write_post(tmp_project, f"post{i}.md", f"Post {i}", "2024-01-15")
+        for i in range(3):
+            write_project(tmp_project, f"proj{i}.md", f"Project {i}", "2024-01-01")
+        build(tmp_project)
+        homepage = (tmp_project / "output" / "index.html").read_text()
+        assert "View all" not in homepage
+
+        write_post(tmp_project, "extra-post.md", "Extra Post", "2024-01-15")
+        build(tmp_project)
+        homepage = (tmp_project / "output" / "index.html").read_text()
+        assert "View all posts" in homepage
+        assert "View all projects" not in homepage
+
+        write_project(tmp_project, "extra-project.md", "Extra Project", "2024-01-01")
+        build(tmp_project)
+        homepage = (tmp_project / "output" / "index.html").read_text()
+        assert "View all projects" in homepage
+
+    def test_project_toc_needs_three_entries_at_shallowest_level(self, tmp_project):
+        def project_page(body):
+            (tmp_project / "content" / "projects" / "p.md").write_text(
+                f"---\ntitle: P\ndate: 2024-01-01\n---\n\n{body}\n")
+            build(tmp_project)
+            return (tmp_project / "output" / "projects" / "p" / "index.html").read_text()
+
+        two = project_page("## One\n\ntext\n\n## Two\n\n### Deep\n\n### Deeper\n")
+        assert 'class="toc"' not in two
+
+        # A deeper heading before the first shallower one is listed only if it is at the minimum level.
+        three = project_page(
+            "### Early\n\n## A &amp; B\n\n### Nested\n\n## Second\n\n## Third\n")
+        toc = three.split('class="toc"')[1].split("</nav>")[0]
+        assert toc.count("<li>") == 3
+        assert "Early" not in toc and "Nested" not in toc
+        assert 'href="#a-b"' in toc
+        assert "A &amp; B" in toc and "&amp;amp;" not in toc
+
     def test_section_index_rendered(self, tmp_project):
         write_post(tmp_project, "post.md", "A Post", "2024-01-15")
         build(tmp_project)

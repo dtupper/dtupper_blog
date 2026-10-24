@@ -128,8 +128,8 @@ class TestRecentlyPostedBadge:
         index_html = (tmp_project / "output" / "blog" / "index.html").read_text()
         assert "badge-new" not in index_html
 
-    def test_new_badge_on_recent_post_detail_page(self, tmp_project):
-        """A recent blog post's own page should show the 'New' badge."""
+    def test_no_badge_on_recent_post_detail_page(self, tmp_project):
+        """Badges appear on listings only, not on the post's own page."""
         today = datetime.now().strftime("%Y-%m-%d")
         _write_post(tmp_project, "fresh.md", "Fresh Post", today)
         builder = _build(tmp_project)
@@ -142,9 +142,7 @@ class TestRecentlyPostedBadge:
         assert len(post_pages) >= 1, "Post page should exist"
 
         post_html = post_pages[0].read_text()
-        assert "data-recency-badge" in post_html
-        assert f'data-posted-date="{today}"' in post_html
-        assert "badge-new" not in post_html
+        assert "data-recency-badge" not in post_html
 
     def test_no_new_badge_on_old_post_detail_page(self, tmp_project):
         """An old blog post's page should NOT show the 'New' badge."""
@@ -232,8 +230,8 @@ class TestRecentlyUpdatedBadge:
         index_html = (tmp_project / "output" / "blog" / "index.html").read_text()
         assert "badge-updated" not in index_html
 
-    def test_updated_badge_on_post_detail(self, tmp_project):
-        """The post detail page should also show the 'Recently Updated' badge."""
+    def test_no_updated_badge_on_post_detail(self, tmp_project):
+        """The post detail page leaves the badge to listings."""
         old_date = (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d")
         today = datetime.now().strftime("%Y-%m-%d")
         _write_post(tmp_project, "updated.md", "Updated Post", old_date,
@@ -243,9 +241,7 @@ class TestRecentlyUpdatedBadge:
         post_pages = list((tmp_project / "output").rglob("**/updated/index.html"))
         assert len(post_pages) >= 1
         post_html = post_pages[0].read_text()
-        assert "data-recency-badge" in post_html
-        assert f'data-updated-date="{today}"' in post_html
-        assert "badge-updated" not in post_html
+        assert "data-recency-badge" not in post_html
 
     def test_updated_badge_on_project_listing(self, tmp_project):
         """Projects with recent last_updated should show the badge on the listing."""
